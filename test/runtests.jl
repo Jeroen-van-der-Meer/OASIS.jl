@@ -34,4 +34,8 @@ using Test
         @test Oasis.read_string(IOBuffer([0x03, 0x61, 0x62, 0x63, 0x64])) == "abc"
         @test Oasis.read_string(IOBuffer([0x00, 0xff])) == ""
     end
+    @testset "Read 2-deltas" begin
+        @test Oasis.read_2_delta(IOBuffer([0x98, 0x2a])) == (1350, 0)
+        @test Oasis.read_2_delta(IOBuffer([0x9b, 0x2a])) == (0, -1350)
+    end
 end

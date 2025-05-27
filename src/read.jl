@@ -47,3 +47,18 @@ function read_string(io::IO)
     s = read(io, length)
     return String(s)
 end
+
+function read_2_delta(io::IO)
+    Δ = read_unsigned_integer(io)
+    dir = Δ & 0x03 # Last two bits
+    magnitude = Δ >> 2 # First two bits
+    if dir == 0x00 # East
+        return (signed(magnitude), 0)
+    elseif dir == 0x01 # North
+        return (0, signed(magnitude))
+    elseif dir == 0x10 # West
+        return (-signed(magnitude), 0)
+    else # South
+        return (0, -signed(magnitude))
+    end
+end
