@@ -48,17 +48,36 @@ function read_string(io::IO)
     return String(s)
 end
 
+east_integer(mag::UInt64) = (signed(mag), 0)
+north_integer(mag::UInt64) = (0, signed(mag))
+west_integer(mag::UInt64) = (-signed(mag), 0)
+south_integer(mag::UInt64) = (0, -signed(mag))
+northeast_integer(mag::UInt64) = (signed(mag), signed(mag))
+northwest_integer(mag::UInt64) = (-signed(mag), signed(mag))
+southwest_integer(mag::UInt64) = (-signed(mag), -signed(mag))
+southeast_integer(mag::UInt64) = (signed(mag), -signed(mag))
+
+const DELTA_READER_PER_DIRECTION = (
+    east_integer,
+    north_integer,
+    west_integer,
+    south_integer,
+    northeast_integer,
+    northwest_integer,
+    southwest_integer,
+    southeast_integer
+)
+
 function read_2_delta(io::IO)
     Δ = read_unsigned_integer(io)
-    dir = Δ & 0x03 # Last two bits
-    magnitude = Δ >> 2 # First two bits
-    if dir == 0x00 # East
-        return (signed(magnitude), 0)
-    elseif dir == 0x01 # North
-        return (0, signed(magnitude))
-    elseif dir == 0x10 # West
-        return (-signed(magnitude), 0)
-    else # South
-        return (0, -signed(magnitude))
-    end
+    dir = Δ & 0x03 + 1 # Last 2 bits
+    magnitude = Δ >> 2 # Remaining bits
+    return DELTA_READER_PER_DIRECTION[dir](magnitude)
+end
+
+function read_3_delta(io::IO)
+    Δ = read_unsigned_integer(io)
+    dir = Δ & 0x07 + 1 # Last 3 bits
+    magnitude = Δ >> 3 # Remaining bits
+    return DELTA_READER_PER_DIRECTION[dir](magnitude)
 end

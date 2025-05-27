@@ -38,4 +38,8 @@ using Test
         @test Oasis.read_2_delta(IOBuffer([0x98, 0x2a])) == (1350, 0)
         @test Oasis.read_2_delta(IOBuffer([0x9b, 0x2a])) == (0, -1350)
     end
+    @testset "Read 3-deltas" begin
+        @test Oasis.read_3_delta(IOBuffer([0xcd, 0x01])) == (-25, 25)
+        @test Oasis.read_3_delta(IOBuffer([0xd7, 0x07])) == (122, -122)
+    end
 end
