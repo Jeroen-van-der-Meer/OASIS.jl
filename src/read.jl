@@ -42,4 +42,8 @@ function read_real(io::IO)
     return REAL_READER_PER_FORMAT[real_format](io)
 end
 
-
+function read_string(io::IO)
+    length = read(io, UInt8)
+    s = read(io, length)
+    return String(s)
+end

@@ -1,7 +1,7 @@
 using Oasis
 using Test
 
-@testset "Read numbers" begin
+@testset "Read data" begin
     @testset "Read unsigned integers" begin
         @test Oasis.read_unsigned_integer(IOBuffer([0x00])) == 0
         @test Oasis.read_unsigned_integer(IOBuffer([0x7f])) == 127
@@ -29,5 +29,9 @@ using Test
         # limited precision.
         @test Oasis.read_real(IOBuffer([0x06, 0xd9, 0x89, 0x1d, 0xbe])) == Float32(-2/13)
         @test Oasis.read_real(IOBuffer([0x07, 0x14, 0x3b, 0xb1, 0x13, 0x3b, 0xb1, 0xc3, 0xbf])) == -2/13
+    end
+    @testset "Read strings" begin
+        @test Oasis.read_string(IOBuffer([0x03, 0x61, 0x62, 0x63, 0x64])) == "abc"
+        @test Oasis.read_string(IOBuffer([0x00, 0xff])) == ""
     end
 end
