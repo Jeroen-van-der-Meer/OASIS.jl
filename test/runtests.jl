@@ -42,6 +42,11 @@ using Test
         @test Oasis.read_3_delta(IOBuffer([0xcd, 0x01])) == (-25, 25)
         @test Oasis.read_3_delta(IOBuffer([0xd7, 0x07])) == (122, -122)
     end
+    @testset "Read g-deltas" begin
+        @test Oasis.read_g_delta(IOBuffer([0xe9, 0x03, 0x7a])) == (122, 61)
+        @test Oasis.read_g_delta(IOBuffer([0xec, 0x05])) == (-46, -46)
+        @test Oasis.read_g_delta(IOBuffer([0xbb, 0x01, 0xb7, 0x0f])) == (-46, -987)
+    end
     @testset "Read point lists" begin
         @test Oasis.read_point_list(IOBuffer([0x00, 0x04, 0x0c, 0x08, 0x11, 0x05])) ==
             [(6, 0), (0, 4), (-8, 0), (0, -2)]
