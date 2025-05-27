@@ -48,6 +48,12 @@ function read_string(io::IO)
     return String(s)
 end
 
+function read_1_delta(io::IO, dir)
+    # dir 0: east/west; dir 1: north/south
+    mag = read_signed_integer(io)
+    return iszero(dir) ? (mag, 0) : (0, mag)
+end
+
 east_integer(mag::UInt64) = (signed(mag), 0)
 north_integer(mag::UInt64) = (0, signed(mag))
 west_integer(mag::UInt64) = (-signed(mag), 0)
@@ -80,4 +86,24 @@ function read_3_delta(io::IO)
     dir = Δ & 0x07 + 1 # Last 3 bits
     magnitude = Δ >> 3 # Remaining bits
     return DELTA_READER_PER_DIRECTION[dir](magnitude)
+end
+
+read_1_delta_list_horizontal_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2) for i in 0:(vc - 1)]
+read_1_delta_list_vertical_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2) for i in 1:vc]
+read_2_delta_list(io::IO, vc::UInt8) = [read_2_delta(io) for _ in 1:vc]
+read_3_delta_list(io::IO, vc::UInt8) = [read_3_delta(io) for _ in 1:vc]
+
+const POINT_LIST_READ_PER_TYPE = (
+    read_1_delta_list_horizontal_first,
+    read_1_delta_list_vertical_first,
+    read_2_delta_list,
+    read_3_delta_list,
+    #read_g_delta_list,
+    #read_g_double_delta_list
+)
+
+function read_point_list(io::IO)
+    type = read(io, UInt8) + 1
+    vertex_count = read(io, UInt8)
+    return POINT_LIST_READ_PER_TYPE[type](io, vertex_count)
 end

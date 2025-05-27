@@ -42,4 +42,14 @@ using Test
         @test Oasis.read_3_delta(IOBuffer([0xcd, 0x01])) == (-25, 25)
         @test Oasis.read_3_delta(IOBuffer([0xd7, 0x07])) == (122, -122)
     end
+    @testset "Read point lists" begin
+        @test Oasis.read_point_list(IOBuffer([0x00, 0x04, 0x0c, 0x08, 0x11, 0x05])) ==
+            [(6, 0), (0, 4), (-8, 0), (0, -2)]
+        @test Oasis.read_point_list(IOBuffer([0x01, 0x04, 0x11, 0x04, 0x04, 0x04])) ==
+            [(0, -8), (2, 0), (0, 2), (2, 0)]
+        @test Oasis.read_point_list(IOBuffer([0x02, 0x05, 0x20, 0x19, 0x12, 0x0b, 0x12])) ==
+            [(8, 0), (0, 6), (-4, 0), (0, -2), (-4, 0)]
+        @test Oasis.read_point_list(IOBuffer([0x03, 0x04, 0x15, 0x21, 0x30, 0x13])) ==
+            [(-2, 2), (0, 4), (6, 0), (0, -2)]
+    end
 end
