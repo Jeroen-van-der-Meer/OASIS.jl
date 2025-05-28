@@ -1,4 +1,4 @@
-function read_unsigned_integer(io::IO)
+function rui(io::IO) # read_unsigned_integer; using shorthand since this function is used often
     output = 0
     shift = 0
     while true
@@ -17,14 +17,14 @@ function unsigned_to_signed(x::UInt64)
 end
 
 function read_signed_integer(io::IO)
-    unsigned_output = read_unsigned_integer(io)
+    unsigned_output = rui(io)
     return unsigned_to_signed(unsigned_output)
 end
 
-read_positive_whole_number(io::IO) = signed(read_unsigned_integer(io))
-read_negative_whole_number(io::IO) = -signed(read_unsigned_integer(io))
-read_positive_reciprocal(io::IO) = 1 / read_unsigned_integer(io)
-read_negative_reciprocal(io::IO) = -1 / read_unsigned_integer(io)
+read_positive_whole_number(io::IO) = signed(rui(io))
+read_negative_whole_number(io::IO) = -signed(rui(io))
+read_positive_reciprocal(io::IO) = 1 / rui(io)
+read_negative_reciprocal(io::IO) = -1 / rui(io)
 read_positive_ratio(io::IO) = read_positive_whole_number(io) / read_positive_whole_number(io)
 read_negative_ratio(io::IO) = read_negative_whole_number(io) / read_positive_whole_number(io)
 read_four_byte_float(io::IO) = Float64(read(io, Float32))
@@ -88,10 +88,7 @@ function read_2_delta(Δ::UInt64)
     return DELTA_READER_PER_DIRECTION[dir + 1](magnitude)
 end
 
-function read_2_delta(io::IO)
-    Δ = read_unsigned_integer(io)
-    return read_2_delta(Δ)
-end
+read_2_delta(io::IO) = read_2_delta(rui(io))
 
 function read_3_delta(Δ::UInt64)
     dir = Δ & 0x07 # Last 3 bits
@@ -99,30 +96,27 @@ function read_3_delta(Δ::UInt64)
     return DELTA_READER_PER_DIRECTION[dir + 1](magnitude)
 end
 
-function read_3_delta(io::IO)
-    Δ = read_unsigned_integer(io)
-    return read_3_delta(Δ)
-end
+read_3_delta(io::IO) = read_3_delta(rui(io))
 
 function read_g_delta(io::IO)
-    Δ = read_unsigned_integer(io)
+    Δ = rui(io)
     form = Δ & 0x01 # Last bit
     Δ >>= 1
     # g-delta comes in two forms
     if form == 0x00
         return read_3_delta(Δ) # Remaining bits to be read out as 3-delta
     else
-        Δ2 = read_unsigned_integer(io)
+        Δ2 = rui(io)
         return Point2i(unsigned_to_signed(Δ), unsigned_to_signed(Δ2))
     end
 end
 
 struct PointGridRange <: AbstractRange{Point2i}
     start::Point2i
-    stepx::Point2i
-    stepy::Point2i
     nstepx::Int64
     nstepy::Int64
+    stepx::Point2i
+    stepy::Point2i
 end
 Base.first(r::PointGridRange) = r.start
 Base.step(r::PointGridRange) = (r.stepx, r.stepy)
@@ -149,30 +143,25 @@ function Base.iterate(r::PointGridRange, i::Integer=zero(length(r)))
 end
 
 read_repetition_type_0(io::IO) = @error "Not implemented" # To be dealt with when we have modal vars
-function read_repetition_type_1(io::IO)
-    xdim = read_unsigned_integer(io)
-    ydim = read_unsigned_integer(io)
-    xspace = read_unsigned_integer(io)
-    yspace = read_unsigned_integer(io)
-    return PointGridRange(
-        Point2i(0, 0),
-        Point2i(xspace, 0),
-        Point2i(0, yspace),
-        xdim + 2,
-        ydim + 2
-    )
-end
+read_repetition_type_1(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, (rui(io), 0), (0, rui(io)))
+read_repetition_type_2(io::IO) = PointGridRange((0, 0), rui(io) + 2, 1, (rui(io), 0), (0, 0))
+read_repetition_type_3(io::IO) = PointGridRange((0, 0), 1, rui(io) + 2, (0, 0), (0, rui(io)))
+read_repetition_type_4(io::IO) = @error "Not implemented"
+read_repetition_type_5(io::IO) = @error "Not implemented"
+read_repetition_type_6(io::IO) = @error "Not implemented"
+read_repetition_type_7(io::IO) = @error "Not implemented"
+read_repetition_type_8(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, read_g_delta(io), read_g_delta(io))
 
 const REPETITION_READER_PER_TYPE = (
     read_repetition_type_0,
     read_repetition_type_1,
-#    read_repetition_type_2,
-#    read_repetition_type_3,
-#    read_repetition_type_4,
-#    read_repetition_type_5,
-#    read_repetition_type_6,
-#    read_repetition_type_7,
-#    read_repetition_type_8,
+    read_repetition_type_2,
+    read_repetition_type_3,
+    read_repetition_type_4,
+    read_repetition_type_5,
+    read_repetition_type_6,
+    read_repetition_type_7,
+    read_repetition_type_8,
 #    read_repetition_type_9,
 #    read_repetition_type_10,
 #    read_repetition_type_11
@@ -209,7 +198,7 @@ function read_property_value(io::IO)
     if type <= 0x07
         return read_real(io, type)
     elseif type == 0x08
-        return read_unsigned_integer(io)
+        return rui(io)
     elseif type == 0x09
         return read_signed_integer(io)
     elseif type <= 0x0f

@@ -4,11 +4,11 @@ using Test
 
 @testset "Read data" begin
     @testset "Read unsigned integers" begin
-        @test Oasis.read_unsigned_integer(IOBuffer([0x00])) == 0
-        @test Oasis.read_unsigned_integer(IOBuffer([0x7f])) == 127
-        @test Oasis.read_unsigned_integer(IOBuffer([0x80, 0x01])) == 128
-        @test Oasis.read_unsigned_integer(IOBuffer([0xff, 0x7f])) == 16383
-        @test Oasis.read_unsigned_integer(IOBuffer([0x80, 0x80, 0x01])) == 16384
+        @test Oasis.rui(IOBuffer([0x00])) == 0
+        @test Oasis.rui(IOBuffer([0x7f])) == 127
+        @test Oasis.rui(IOBuffer([0x80, 0x01])) == 128
+        @test Oasis.rui(IOBuffer([0xff, 0x7f])) == 16383
+        @test Oasis.rui(IOBuffer([0x80, 0x80, 0x01])) == 16384
     end
     @testset "Read signed integers" begin
         @test Oasis.read_signed_integer(IOBuffer([0x00])) == 0
@@ -71,12 +71,18 @@ using Test
     end
     @testset "Read repetitions" begin
         @test Oasis.read_repetition(IOBuffer([0x01, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
-            PointGridRange((0, 0), (1, 0), (0, 1), 130, 129)
+            PointGridRange((0, 0), 130, 129, (1, 0), (0, 1))
+        @test Oasis.read_repetition(IOBuffer([0x02, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
+            PointGridRange((0, 0), 130, 1, (127, 0), (0, 0))
+        @test Oasis.read_repetition(IOBuffer([0x03, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
+            PointGridRange((0, 0), 1, 130, (0, 0), (0, 127))
+        @test Oasis.read_repetition(IOBuffer([0x08, 0x80, 0x01, 0x7f, 0xe9, 0x03, 0x7a, 0xa0, 0x01])) ==
+            PointGridRange((0, 0), 130, 129, (122, 61), (10, 0))
     end
 end
 
 @testset "Point grid range" begin
-    p = PointGridRange((1, 1), (1, 1), (0, 2), 3, 2)
+    p = PointGridRange((1, 1), 3, 2, (1, 1), (0, 2))
     @test length(p) == 6
     @test first(p) == Point2i(1, 1)
     @test last(p) == Point2i(3, 5)
