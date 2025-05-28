@@ -93,6 +93,13 @@ using Test
         @test Oasis.read_repetition(IOBuffer([0x0b, 0x01, 0x02, 0xe9, 0x03, 0x7a, 0xe9, 0x03, 0x7a])) ==
             Point2i[(0, 0), (244, 122), (488, 244)]
     end
+    @testset "Intervals" begin
+        @test Oasis.read_interval(IOBuffer([0x00, 0x80, 0x01, 0x80, 0x02])) == Oasis.Interval(0, typemax(UInt64))
+        @test Oasis.read_interval(IOBuffer([0x01, 0x80, 0x01, 0x80, 0x02])) == Oasis.Interval(0, 128)
+        @test Oasis.read_interval(IOBuffer([0x02, 0x80, 0x01, 0x80, 0x02])) == Oasis.Interval(128, typemax(UInt64))
+        @test Oasis.read_interval(IOBuffer([0x03, 0x80, 0x01, 0x80, 0x02])) == Oasis.Interval(128, 128)
+        @test Oasis.read_interval(IOBuffer([0x04, 0x80, 0x01, 0x80, 0x02])) == Oasis.Interval(128, 256)
+    end
 end
 
 @testset "Point grid range" begin

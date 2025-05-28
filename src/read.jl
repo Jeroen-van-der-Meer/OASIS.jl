@@ -214,3 +214,29 @@ function read_property_value(io::IO)
         return read_string(io)
     end
 end
+
+struct Interval
+    low::UInt64
+    high::UInt64
+end
+
+Base.in(p::UInt64, i::Interval) = i.low <= p <= i.high
+
+read_interval_type_0(io::IO) = Interval(0, typemax(UInt64))
+read_interval_type_1(io::IO) = Interval(0, rui(io))
+read_interval_type_2(io::IO) = Interval(rui(io), typemax(UInt64))
+read_interval_type_3(io::IO) = (x = rui(io); Interval(x, x))
+read_interval_type_4(io::IO) = Interval(rui(io), rui(io))
+
+const INTERVAL_READER_PER_TYPE = (
+    read_interval_type_0,
+    read_interval_type_1,
+    read_interval_type_2,
+    read_interval_type_3,
+    read_interval_type_4
+)
+
+function read_interval(io::IO)
+    type = read(io, UInt8)
+    return INTERVAL_READER_PER_TYPE[type + 1](io)
+end
