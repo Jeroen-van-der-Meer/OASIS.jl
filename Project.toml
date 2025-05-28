@@ -2,3 +2,9 @@ name = "Oasis"
 uuid = "06265d1e-e248-4aa0-9c0a-73a2b8992637"
 authors = ["Jeroen van der Meer <jeroen.van.der.meer@asml.com>"]
 version = "0.1.0"
+
+[deps]
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
+
+[compat]
+GeometryBasics = "0.5.9"

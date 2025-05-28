@@ -41,9 +41,13 @@ const REAL_READER_PER_FORMAT = (
     read_eight_byte_float
 )
 
+function read_real(io::IO, format::UInt8)
+    return REAL_READER_PER_FORMAT[format + 1](io)
+end
+
 function read_real(io::IO)
-    real_format = read(io, UInt8) + 1
-    return REAL_READER_PER_FORMAT[real_format](io)
+    format = read(io, UInt8)
+    return read_real(io, format)
 end
 
 function read_string(io::IO)
@@ -55,17 +59,17 @@ end
 function read_1_delta(io::IO, dir)
     # dir 0: east/west; dir 1: north/south
     mag = read_signed_integer(io)
-    return iszero(dir) ? (mag, 0) : (0, mag)
+    return iszero(dir) ? Point2i(mag, 0) : Point2i(0, mag)
 end
 
-east_integer(mag::UInt64) = (signed(mag), 0)
-north_integer(mag::UInt64) = (0, signed(mag))
-west_integer(mag::UInt64) = (-signed(mag), 0)
-south_integer(mag::UInt64) = (0, -signed(mag))
-northeast_integer(mag::UInt64) = (signed(mag), signed(mag))
-northwest_integer(mag::UInt64) = (-signed(mag), signed(mag))
-southwest_integer(mag::UInt64) = (-signed(mag), -signed(mag))
-southeast_integer(mag::UInt64) = (signed(mag), -signed(mag))
+east_integer(mag::UInt64) = Point2i(signed(mag), 0)
+north_integer(mag::UInt64) = Point2i(0, signed(mag))
+west_integer(mag::UInt64) = Point2i(-signed(mag), 0)
+south_integer(mag::UInt64) = Point2i(0, -signed(mag))
+northeast_integer(mag::UInt64) = Point2i(signed(mag), signed(mag))
+northwest_integer(mag::UInt64) = Point2i(-signed(mag), signed(mag))
+southwest_integer(mag::UInt64) = Point2i(-signed(mag), -signed(mag))
+southeast_integer(mag::UInt64) = Point2i(signed(mag), -signed(mag))
 
 const DELTA_READER_PER_DIRECTION = (
     east_integer,
@@ -78,17 +82,21 @@ const DELTA_READER_PER_DIRECTION = (
     southeast_integer
 )
 
+function read_2_delta(Δ::UInt64)
+    dir = Δ & 0x03 # Last 2 bits
+    magnitude = Δ >> 2 # Remaining bits
+    return DELTA_READER_PER_DIRECTION[dir + 1](magnitude)
+end
+
 function read_2_delta(io::IO)
     Δ = read_unsigned_integer(io)
-    dir = Δ & 0x03 + 1 # Last 2 bits
-    magnitude = Δ >> 2 # Remaining bits
-    return DELTA_READER_PER_DIRECTION[dir](magnitude)
+    return read_2_delta(Δ)
 end
 
 function read_3_delta(Δ::UInt64)
-    dir = Δ & 0x07 + 1 # Last 3 bits
+    dir = Δ & 0x07 # Last 3 bits
     magnitude = Δ >> 3 # Remaining bits
-    return DELTA_READER_PER_DIRECTION[dir](magnitude)
+    return DELTA_READER_PER_DIRECTION[dir + 1](magnitude)
 end
 
 function read_3_delta(io::IO)
@@ -105,7 +113,7 @@ function read_g_delta(io::IO)
         return read_3_delta(Δ) # Remaining bits to be read out as 3-delta
     else
         Δ2 = read_unsigned_integer(io)
-        return (unsigned_to_signed(Δ), unsigned_to_signed(Δ2))
+        return Point2i(unsigned_to_signed(Δ), unsigned_to_signed(Δ2))
     end
 end
 
@@ -113,18 +121,34 @@ read_1_delta_list_horizontal_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2)
 read_1_delta_list_vertical_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2) for i in 1:vc]
 read_2_delta_list(io::IO, vc::UInt8) = [read_2_delta(io) for _ in 1:vc]
 read_3_delta_list(io::IO, vc::UInt8) = [read_3_delta(io) for _ in 1:vc]
+read_g_delta_list(io::IO, vc::UInt8) = [read_g_delta(io) for _ in 1:vc]
 
 const POINT_LIST_READ_PER_TYPE = (
     read_1_delta_list_horizontal_first,
     read_1_delta_list_vertical_first,
     read_2_delta_list,
     read_3_delta_list,
-    #read_g_delta_list,
-    #read_g_double_delta_list
+    read_g_delta_list,
+    cumsum ∘ read_g_delta_list
 )
 
 function read_point_list(io::IO)
     type = read(io, UInt8) + 1
     vertex_count = read(io, UInt8)
     return POINT_LIST_READ_PER_TYPE[type](io, vertex_count)
+end
+
+function read_property_value(io::IO)
+    type = read(io, UInt8)
+    if type <= 0x07
+        return read_real(io, type)
+    elseif type == 0x08
+        return read_unsigned_integer(io)
+    elseif type == 0x09
+        return read_signed_integer(io)
+    elseif type <= 0x0f
+        # Not clear to me if this is correct. Is propstring-reference-number encoded in the
+        # same way as a string?
+        return read_string(io)
+    end
 end

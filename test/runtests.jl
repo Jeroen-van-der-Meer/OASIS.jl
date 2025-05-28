@@ -1,3 +1,4 @@
+using GeometryBasics
 using Oasis
 using Test
 
@@ -35,26 +36,34 @@ using Test
         @test Oasis.read_string(IOBuffer([0x00, 0xff])) == ""
     end
     @testset "Read 2-deltas" begin
-        @test Oasis.read_2_delta(IOBuffer([0x98, 0x2a])) == (1350, 0)
-        @test Oasis.read_2_delta(IOBuffer([0x9b, 0x2a])) == (0, -1350)
+        @test Oasis.read_2_delta(IOBuffer([0x98, 0x2a])) == Point2i(1350, 0)
+        @test Oasis.read_2_delta(IOBuffer([0x9b, 0x2a])) == Point2i(0, -1350)
     end
     @testset "Read 3-deltas" begin
-        @test Oasis.read_3_delta(IOBuffer([0xcd, 0x01])) == (-25, 25)
-        @test Oasis.read_3_delta(IOBuffer([0xd7, 0x07])) == (122, -122)
+        @test Oasis.read_3_delta(IOBuffer([0xcd, 0x01])) == Point2i(-25, 25)
+        @test Oasis.read_3_delta(IOBuffer([0xd7, 0x07])) == Point2i(122, -122)
     end
     @testset "Read g-deltas" begin
-        @test Oasis.read_g_delta(IOBuffer([0xe9, 0x03, 0x7a])) == (122, 61)
-        @test Oasis.read_g_delta(IOBuffer([0xec, 0x05])) == (-46, -46)
-        @test Oasis.read_g_delta(IOBuffer([0xbb, 0x01, 0xb7, 0x0f])) == (-46, -987)
+        @test Oasis.read_g_delta(IOBuffer([0xe9, 0x03, 0x7a])) == Point2i(122, 61)
+        @test Oasis.read_g_delta(IOBuffer([0xec, 0x05])) == Point2i(-46, -46)
+        @test Oasis.read_g_delta(IOBuffer([0xbb, 0x01, 0xb7, 0x0f])) == Point2i(-46, -987)
     end
     @testset "Read point lists" begin
         @test Oasis.read_point_list(IOBuffer([0x00, 0x04, 0x0c, 0x08, 0x11, 0x05])) ==
-            [(6, 0), (0, 4), (-8, 0), (0, -2)]
+            Point2i[(6, 0), (0, 4), (-8, 0), (0, -2)]
         @test Oasis.read_point_list(IOBuffer([0x01, 0x04, 0x11, 0x04, 0x04, 0x04])) ==
-            [(0, -8), (2, 0), (0, 2), (2, 0)]
+            Point2i[(0, -8), (2, 0), (0, 2), (2, 0)]
         @test Oasis.read_point_list(IOBuffer([0x02, 0x05, 0x20, 0x19, 0x12, 0x0b, 0x12])) ==
-            [(8, 0), (0, 6), (-4, 0), (0, -2), (-4, 0)]
+            Point2i[(8, 0), (0, 6), (-4, 0), (0, -2), (-4, 0)]
         @test Oasis.read_point_list(IOBuffer([0x03, 0x04, 0x15, 0x21, 0x30, 0x13])) ==
-            [(-2, 2), (0, 4), (6, 0), (0, -2)]
+            Point2i[(-2, 2), (0, 4), (6, 0), (0, -2)]
+        @test Oasis.read_point_list(IOBuffer([0x04, 0x02, 0x44, 0x09, 0x0d])) ==
+            Point2i[(-4, 0), (2, -6)]
+        @test Oasis.read_point_list(IOBuffer([
+            0x05, 0x09, 0x01, 0x03, 0x29,
+            0x00, 0x01, 0x04, 0x01, 0x03,
+            0x01, 0x03, 0x2b, 0x04, 0x2b,
+            0x00, 0x01, 0x03, 0x01, 0x03])) ==
+            Point2i[(0, -1), (10, -1), (10, 1), (10, 0), (10, -1), (0, 1), (-10, 1), (-10, 0), (-10, -1)]
     end
 end
