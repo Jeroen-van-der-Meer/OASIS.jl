@@ -117,13 +117,79 @@ function read_g_delta(io::IO)
     end
 end
 
+struct PointGridRange <: AbstractRange{Point2i}
+    start::Point2i
+    stepx::Point2i
+    stepy::Point2i
+    nstepx::Int64
+    nstepy::Int64
+end
+Base.first(r::PointGridRange) = r.start
+Base.step(r::PointGridRange) = (r.stepx, r.stepy)
+Base.last(r::PointGridRange) = r.start + (r.nstepx - 1) * r.stepx + (r.nstepy - 1) * r.stepy
+function Base.getindex(r::PointGridRange, i::Integer)
+    1 <= i <= length(r) || throw(BoundsError(r, i))
+    s1 = r.nstepx
+    ix = rem(i - 1, s1)
+    iy = div(i - 1, s1)
+    return r.start + ix * r.stepx + iy * r.stepy
+end
+function Base.getindex(r::PointGridRange, i::Integer, j::Integer)
+    s1, s2 = size(r)
+    1 <= i <= s1 || throw(BoundsError(r, [i, j]))
+    1 <= j <= s2 || throw(BoundsError(r, [i, j]))
+    return r.start + (i - 1) * r.stepx + (j - 1) * r.stepy
+end
+Base.size(r::PointGridRange) = (r.nstepx, r.nstepy)
+Base.length(r::PointGridRange) = prod(size(r))
+function Base.iterate(r::PointGridRange, i::Integer=zero(length(r)))
+    i += oneunit(i)
+    length(r) < i && return nothing
+    r[i], i
+end
+
+read_repetition_type_0(io::IO) = @error "Not implemented" # To be dealt with when we have modal vars
+function read_repetition_type_1(io::IO)
+    xdim = read_unsigned_integer(io)
+    ydim = read_unsigned_integer(io)
+    xspace = read_unsigned_integer(io)
+    yspace = read_unsigned_integer(io)
+    return PointGridRange(
+        Point2i(0, 0),
+        Point2i(xspace, 0),
+        Point2i(0, yspace),
+        xdim + 2,
+        ydim + 2
+    )
+end
+
+const REPETITION_READER_PER_TYPE = (
+    read_repetition_type_0,
+    read_repetition_type_1,
+#    read_repetition_type_2,
+#    read_repetition_type_3,
+#    read_repetition_type_4,
+#    read_repetition_type_5,
+#    read_repetition_type_6,
+#    read_repetition_type_7,
+#    read_repetition_type_8,
+#    read_repetition_type_9,
+#    read_repetition_type_10,
+#    read_repetition_type_11
+)
+
+function read_repetition(io::IO)
+    type = read(io, UInt8)
+    return REPETITION_READER_PER_TYPE[type + 1](io)
+end
+
 read_1_delta_list_horizontal_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2) for i in 0:(vc - 1)]
 read_1_delta_list_vertical_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2) for i in 1:vc]
 read_2_delta_list(io::IO, vc::UInt8) = [read_2_delta(io) for _ in 1:vc]
 read_3_delta_list(io::IO, vc::UInt8) = [read_3_delta(io) for _ in 1:vc]
 read_g_delta_list(io::IO, vc::UInt8) = [read_g_delta(io) for _ in 1:vc]
 
-const POINT_LIST_READ_PER_TYPE = (
+const POINT_LIST_READER_PER_TYPE = (
     read_1_delta_list_horizontal_first,
     read_1_delta_list_vertical_first,
     read_2_delta_list,
@@ -133,9 +199,9 @@ const POINT_LIST_READ_PER_TYPE = (
 )
 
 function read_point_list(io::IO)
-    type = read(io, UInt8) + 1
+    type = read(io, UInt8)
     vertex_count = read(io, UInt8)
-    return POINT_LIST_READ_PER_TYPE[type](io, vertex_count)
+    return POINT_LIST_READER_PER_TYPE[type + 1](io, vertex_count)
 end
 
 function read_property_value(io::IO)

@@ -63,7 +63,32 @@ using Test
             0x05, 0x09, 0x01, 0x03, 0x29,
             0x00, 0x01, 0x04, 0x01, 0x03,
             0x01, 0x03, 0x2b, 0x04, 0x2b,
-            0x00, 0x01, 0x03, 0x01, 0x03])) ==
-            Point2i[(0, -1), (10, -1), (10, 1), (10, 0), (10, -1), (0, 1), (-10, 1), (-10, 0), (-10, -1)]
+            0x00, 0x01, 0x03, 0x01, 0x03
+        ])) == Point2i[
+            (0, -1), (10, -1), (10, 1), (10, 0), (10, -1),
+            (0, 1), (-10, 1), (-10, 0), (-10, -1)
+        ]
     end
+    @testset "Read repetitions" begin
+        @test Oasis.read_repetition(IOBuffer([0x01, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
+            PointGridRange((0, 0), (1, 0), (0, 1), 130, 129)
+    end
+end
+
+@testset "Point grid range" begin
+    p = PointGridRange((1, 1), (1, 1), (0, 2), 3, 2)
+    @test length(p) == 6
+    @test first(p) == Point2i(1, 1)
+    @test last(p) == Point2i(3, 5)
+    @test size(p) == (3, 2)
+    @test_throws BoundsError p[0]
+    @test p[1] == p[1, 1] == Point2i(1, 1)
+    @test p[2] == p[2, 1] == Point2i(2, 2)
+    @test p[3] == p[3, 1] == Point2i(3, 3)
+    @test p[4] == p[1, 2] == Point2i(1, 3)
+    @test_throws BoundsError p[7]
+    @test_throws BoundsError p[4, 1]
+    @test_throws BoundsError p[1, 3]
+    @test_throws BoundsError p[0]
+    @test collect(p) == [p[1], p[2], p[3], p[4], p[5], p[6]]
 end
