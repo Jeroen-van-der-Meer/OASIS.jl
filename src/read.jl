@@ -59,17 +59,17 @@ end
 function read_1_delta(io::IO, dir)
     # dir 0: east/west; dir 1: north/south
     mag = read_signed_integer(io)
-    return iszero(dir) ? Point2i(mag, 0) : Point2i(0, mag)
+    return iszero(dir) ? Point{2, Int64}(mag, 0) : Point{2, Int64}(0, mag)
 end
 
-east_integer(mag::UInt64) = Point2i(signed(mag), 0)
-north_integer(mag::UInt64) = Point2i(0, signed(mag))
-west_integer(mag::UInt64) = Point2i(-signed(mag), 0)
-south_integer(mag::UInt64) = Point2i(0, -signed(mag))
-northeast_integer(mag::UInt64) = Point2i(signed(mag), signed(mag))
-northwest_integer(mag::UInt64) = Point2i(-signed(mag), signed(mag))
-southwest_integer(mag::UInt64) = Point2i(-signed(mag), -signed(mag))
-southeast_integer(mag::UInt64) = Point2i(signed(mag), -signed(mag))
+east_integer(mag::UInt64) = Point{2, Int64}(signed(mag), 0)
+north_integer(mag::UInt64) = Point{2, Int64}(0, signed(mag))
+west_integer(mag::UInt64) = Point{2, Int64}(-signed(mag), 0)
+south_integer(mag::UInt64) = Point{2, Int64}(0, -signed(mag))
+northeast_integer(mag::UInt64) = Point{2, Int64}(signed(mag), signed(mag))
+northwest_integer(mag::UInt64) = Point{2, Int64}(-signed(mag), signed(mag))
+southwest_integer(mag::UInt64) = Point{2, Int64}(-signed(mag), -signed(mag))
+southeast_integer(mag::UInt64) = Point{2, Int64}(signed(mag), -signed(mag))
 
 const DELTA_READER_PER_DIRECTION = (
     east_integer,
@@ -107,7 +107,7 @@ function read_g_delta(io::IO)
         return read_3_delta(Δ) # Remaining bits to be read out as 3-delta
     else
         Δ2 = rui(io)
-        return Point2i(unsigned_to_signed(Δ), unsigned_to_signed(Δ2))
+        return Point{2, Int64}(unsigned_to_signed(Δ), unsigned_to_signed(Δ2))
     end
 end
 
@@ -136,21 +136,28 @@ function Base.getindex(r::PointGridRange, i::Integer, j::Integer)
 end
 Base.size(r::PointGridRange) = (r.nstepx, r.nstepy)
 Base.length(r::PointGridRange) = prod(size(r))
-function Base.iterate(r::PointGridRange, i::Integer=zero(length(r)))
+function Base.iterate(r::PointGridRange, i::Integer = zero(length(r)))
     i += oneunit(i)
     length(r) < i && return nothing
     r[i], i
 end
 
+collect_repetitions_x(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum([Point{2, Int64}(rui(io), 0) for _ in 1:(nrep - 1)]), (0, 0))
+collect_repetitions_y(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([Point{2, Int64}(0, rui(io)) for _ in 1:(nrep - 1)])), (0, 0))
+collect_repetitions_g(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([read_g_delta(io) for _ in 1:(nrep - 1)])), (0, 0))
+
 read_repetition_type_0(io::IO) = @error "Not implemented" # To be dealt with when we have modal vars
 read_repetition_type_1(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, (rui(io), 0), (0, rui(io)))
-read_repetition_type_2(io::IO) = PointGridRange((0, 0), rui(io) + 2, 1, (rui(io), 0), (0, 0))
-read_repetition_type_3(io::IO) = PointGridRange((0, 0), 1, rui(io) + 2, (0, 0), (0, rui(io)))
-read_repetition_type_4(io::IO) = @error "Not implemented"
-read_repetition_type_5(io::IO) = @error "Not implemented"
-read_repetition_type_6(io::IO) = @error "Not implemented"
-read_repetition_type_7(io::IO) = @error "Not implemented"
+read_repetition_type_2(io::IO) = PointGridRange((0, 0), rui(io) + 2, 1, (rui(io), 0), (1, 1))
+read_repetition_type_3(io::IO) = PointGridRange((0, 0), 1, rui(io) + 2, (1, 1), (0, rui(io)))
+read_repetition_type_4(io::IO) = collect_repetitions_x(io, rui(io) + 2)
+read_repetition_type_5(io::IO) = collect_repetitions_x(io, rui(io) + 2; grid = signed(rui(io)))
+read_repetition_type_6(io::IO) = collect_repetitions_y(io, rui(io) + 2)
+read_repetition_type_7(io::IO) = collect_repetitions_y(io, rui(io) + 2; grid = signed(rui(io)))
 read_repetition_type_8(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, read_g_delta(io), read_g_delta(io))
+read_repetition_type_9(io::IO) = PointGridRange((0, 0), rui(io) + 2, 1, read_g_delta(io), (1, 1))
+read_repetition_type_10(io::IO) = collect_repetitions_g(io, rui(io) + 2)
+read_repetition_type_11(io::IO) = collect_repetitions_g(io, rui(io) + 2; grid = signed(rui(io)))
 
 const REPETITION_READER_PER_TYPE = (
     read_repetition_type_0,
@@ -162,9 +169,9 @@ const REPETITION_READER_PER_TYPE = (
     read_repetition_type_6,
     read_repetition_type_7,
     read_repetition_type_8,
-#    read_repetition_type_9,
-#    read_repetition_type_10,
-#    read_repetition_type_11
+    read_repetition_type_9,
+    read_repetition_type_10,
+    read_repetition_type_11
 )
 
 function read_repetition(io::IO)

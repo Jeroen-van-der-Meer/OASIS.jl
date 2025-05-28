@@ -73,11 +73,25 @@ using Test
         @test Oasis.read_repetition(IOBuffer([0x01, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
             PointGridRange((0, 0), 130, 129, (1, 0), (0, 1))
         @test Oasis.read_repetition(IOBuffer([0x02, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
-            PointGridRange((0, 0), 130, 1, (127, 0), (0, 0))
+            PointGridRange((0, 0), 130, 1, (127, 0), (1, 1))
         @test Oasis.read_repetition(IOBuffer([0x03, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
-            PointGridRange((0, 0), 1, 130, (0, 0), (0, 127))
+            PointGridRange((0, 0), 1, 130, (1, 1), (0, 127))
+        @test Oasis.read_repetition(IOBuffer([0x04, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
+            Point2i[(0, 0), (127, 0), (128, 0), (255, 0)]
+        @test Oasis.read_repetition(IOBuffer([0x05, 0x02, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
+            Point2i[(0, 0), (254, 0), (256, 0), (510, 0)]
+        @test Oasis.read_repetition(IOBuffer([0x06, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
+            Point2i[(0, 0), (0, 127), (0, 128), (0, 255)]
+        @test Oasis.read_repetition(IOBuffer([0x07, 0x02, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
+            Point2i[(0, 0), (0, 254), (0, 256), (0, 510)]
         @test Oasis.read_repetition(IOBuffer([0x08, 0x80, 0x01, 0x7f, 0xe9, 0x03, 0x7a, 0xa0, 0x01])) ==
             PointGridRange((0, 0), 130, 129, (122, 61), (10, 0))
+        @test Oasis.read_repetition(IOBuffer([0x09, 0x01, 0xe9, 0x03, 0x7a])) ==
+            PointGridRange((0, 0), 3, 1, (122, 61), (1, 1))
+        @test Oasis.read_repetition(IOBuffer([0x0a, 0x01, 0xe9, 0x03, 0x7a, 0xe9, 0x03, 0x7a])) ==
+            Point2i[(0, 0), (122, 61), (244, 122)]
+        @test Oasis.read_repetition(IOBuffer([0x0b, 0x01, 0x02, 0xe9, 0x03, 0x7a, 0xe9, 0x03, 0x7a])) ==
+            Point2i[(0, 0), (244, 122), (488, 244)]
     end
 end
 
