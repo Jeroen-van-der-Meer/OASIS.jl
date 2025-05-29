@@ -119,3 +119,9 @@ end
     @test_throws BoundsError p[0]
     @test collect(p) == [p[1], p[2], p[3], p[4], p[5], p[6]]
 end
+
+@testset "Parse OASIS files" begin
+    filepath = joinpath(@__DIR__, "testdata", "polygon.oas")
+    of = oasisread(filepath)
+    @test of isa OasisFile
+end
