@@ -121,7 +121,12 @@ end
 end
 
 @testset "Parse OASIS files" begin
-    filepath = joinpath(@__DIR__, "testdata", "polygon.oas")
-    of = oasisread(filepath)
-    @test of isa OasisFile
+    filenames = [
+        "polygon.oas" # Uncompressed file containing single polygon
+    ]
+    for filename in filenames
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath)
+        @test oas isa Oasis
+    end
 end

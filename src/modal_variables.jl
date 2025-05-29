@@ -23,10 +23,3 @@
     ctrapezoidType::Int64 = 0 # FIXME: Type
     circleRadius::Int64 = 0 # FIXME: Type
 end
-
-struct OasisStream
-    io::IOStream
-    modals::ModalVariables
-end
-
-OasisStream(io::IOStream) = OasisStream(io, ModalVariables())

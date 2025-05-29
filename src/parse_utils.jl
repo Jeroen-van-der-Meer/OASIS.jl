@@ -1,29 +1,31 @@
 function read_or_modal(
-    os::OasisStream,
+    io::IO,
+    modals::ModalVariables,
     reader::Function,
     modal::Symbol,
     info_byte::UInt8,
     position::Int64
 )
     if bit_is_nonzero(info_byte, position)
-        v = reader(os.io)
-        setproperty!(os.modals, modal, v)
+        v = reader(io)
+        setproperty!(modals, modal, v)
         return v
     else
-        return getproperty(os.modals, modal)
+        return getproperty(modals, modal)
     end
 end
 
 function read_or_nothing(
-    os::OasisStream,
+    io::IO,
+    modals::ModalVariables,
     reader::Function,
     modal::Symbol,
     info_byte::UInt8,
     position::Int64
 )
     if bit_is_nonzero(info_byte, position)
-        v = reader(os.io)
-        setproperty!(os.modals, modal, v)
+        v = reader(io)
+        setproperty!(modals, modal, v)
         return v
     else
         return nothing

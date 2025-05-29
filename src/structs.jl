@@ -48,7 +48,7 @@ struct Cell <: AbstractOasisData
     nameNumber::UInt64
 end
 
-@kwdef struct OasisFile <: AbstractOasisData
+@kwdef struct Oasis <: AbstractOasisData
     cells::Vector{Cell} = [] # Might need to be the top cell instead
     metadata::Metadata = Metadata()
     references::References = References()
