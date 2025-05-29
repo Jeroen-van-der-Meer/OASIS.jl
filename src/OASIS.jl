@@ -1,4 +1,4 @@
-module Oasis
+module OASIS
 
 using GeometryBasics
 
@@ -31,4 +31,4 @@ function oasisread(filename::AbstractString)
     return of
 end
 
-end # module Oasis
+end # module OASIS
