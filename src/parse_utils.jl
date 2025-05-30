@@ -1,6 +1,5 @@
 function read_or_modal(
     io::IO,
-    modals::ModalVariables,
     reader::Function,
     modal::Symbol,
     info_byte::UInt8,
@@ -17,7 +16,6 @@ end
 
 function read_or_nothing(
     io::IO,
-    modals::ModalVariables,
     reader::Function,
     modal::Symbol,
     info_byte::UInt8,

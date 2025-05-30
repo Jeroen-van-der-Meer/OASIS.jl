@@ -1,4 +1,4 @@
-@kwdef mutable struct ModalVariables
+Base.@kwdef mutable struct ModalVariables
     repetition::AbstractVector{Point2i} = []
     placementX::Int64 = 0 # FIXME: Type
     placementY::Int64 = 0 # FIXME: Type

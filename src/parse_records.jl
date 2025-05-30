@@ -1,6 +1,6 @@
-skip_record(::IO, ::ModalVariables, ::AbstractOasisData) = return
+skip_record(::IO) = return
 
-function parse_start(io::IO, ::ModalVariables, oas::Oasis)
+function parse_start(io::IO)
     version = VersionNumber(read_string(io))
     oas.metadata.version = version
     unit = read_real(io)
@@ -14,18 +14,18 @@ function parse_start(io::IO, ::ModalVariables, oas::Oasis)
     end
 end
 
-function parse_cellname_impl(io::IO, ::ModalVariables, oas::Oasis)
+function parse_cellname_impl(io::IO)
     cellname = read_string(io)
     cellname_number = length(oas.references.cellNames)
     reference = NumericReference(cellname, cellname_number)
     push!(oas.references.cellNames, reference)
 end
 
-parse_propname_impl(io::IO, ::ModalVariables, ::Oasis) = read_string(io)
+parse_propname_impl(io::IO) = read_string(io)
 
-parse_propstring_impl(io::IO, ::ModalVariables, ::Oasis) = read_string(io)
+parse_propstring_impl(io::IO) = read_string(io)
 
-function parse_layername(io::IO, ::ModalVariables, oas::Oasis)
+function parse_layername(io::IO)
     layername = read_string(io)
     layer_interval = read_interval(io)
     datatype_interval = read_interval(io)
@@ -33,7 +33,7 @@ function parse_layername(io::IO, ::ModalVariables, oas::Oasis)
     push!(oas.references.layerNames, layer_reference)
 end
 
-function parse_textlayername(io::IO, ::ModalVariables, oas::Oasis)
+function parse_textlayername(io::IO)
     layername = read_string(io)
     layer_interval = read_interval(io)
     datatype_interval = read_interval(io)
@@ -46,36 +46,94 @@ function is_end_of_cell(next_record::UInt8)
     # END, CELLNAME, TEXTSTRING, PROPNAME, PROPSTRING, LAYERNAME, CELL, XNAME
     return (0x02 <= next_record <= 0x0e) || (next_record == 0x1e) || (next_record == 0x1f)
 end
-function parse_cell_ref(io::IO, modals::ModalVariables, oas::Oasis)
+function parse_cell_ref(io::IO)
     # The reason we look ahead one byte is because we cannot tell in advance when the CELL
     # record ends. If it ends, this function will likely return to the main parser which also
     # needs to read a byte to find the next record.
     cellname_number = rui(io)
-    cell = Cell([], cellname_number)
+    global cell = Cell([], [], cellname_number)
     while true
         record_type = peek(io, UInt8)
         is_end_of_cell(record_type) ? break : read(io, UInt8)
-        RECORD_PARSER_PER_TYPE[record_type + 1](io, modals, cell)
+        RECORD_PARSER_PER_TYPE[record_type + 1](io)
     end
     push!(oas.cells, cell)
 end
 
-function parse_xyabsolute(::IO, modals::ModalVariables, ::Oasis)
+function parse_xyabsolute(::IO)
     modals.xyAbsolute = true
 end
 
-function parse_xyrelative(::IO, modals::ModalVariables, ::Oasis)
+function parse_xyrelative(::IO)
     modals.xyAbsolute = false
 end
 
-function parse_polygon(io::IO, modals::ModalVariables, cell::Cell)
+# PLACEMENT records can either use CELLNAME references or strings to refer to what cell is being
+# placed. For consistency, we wish to always log a reference number. However, there is no
+# guarantee that such reference exists, so we'll have to manually create it.
+function cellname_to_cellname_number(cellname::String)
+    cellname_number = find_reference(number, oas.references.cellNames)
+    if isnothing(cellname_number)
+        cellname_number = rand(UInt64)
+        push!(oas.references.cellNames, NumericReference(cellname, cellname_number))
+    end
+end
+
+function parse_placement(io::IO)
     info_byte = read(io, UInt8)
-    layer_number = read_or_modal(io, modals, rui, :layer, info_byte, 8)
-    datatype_number = read_or_modal(io, modals, rui, :datatype, info_byte, 7)
-    point_list = read_or_modal(io, modals, read_point_list, :polygonPointList, info_byte, 3)
-    x = read_or_modal(io, modals, read_signed_integer, :geometryX, info_byte, 4)
-    y = read_or_modal(io, modals, read_signed_integer, :geometryY, info_byte, 5)
-    repetition = read_or_nothing(io, modals, read_repetition, :repetition, info_byte, 6)
+    cellname_explicit = bit_is_nonzero(info_byte, 1)
+    if cellname_explicit
+        cellname_as_ref = bit_is_nonzero(info_byte, 2)
+        if cellname_as_ref
+            cellname_number = rui(io)
+        else
+            cellname = read_string(io)
+            cellname_number = cellname_to_cellname_number(cellname)
+            # If a string is used to denote the cellname, find the corresponding reference. If
+            # no such reference exists (yet?), create a random one ourselves.
+        end
+    else
+        cellname = modals.placementCell
+        if cellname isa String
+            cellname_number = cellname_to_cellname_number(cellname)
+        else
+            cellname_number = cellname
+        end
+    end
+    x = read_or_modal(io, read_signed_integer, :placementX, info_byte, 3)
+    y = read_or_modal(io, read_signed_integer, :placementY, info_byte, 4)
+    location = Point{2, Int64}(x, y)
+    rotation = ((info_byte >> 1) & 0x03) * 90
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 5)
+    placement = CellPlacement(cellname_number, location, rotation, 1.0, repetition)
+    push!(cell.cells, placement)
+end
+
+function parse_rectangle(io::IO)
+    info_byte = read(io, UInt8)
+    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
+    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
+    width = read_or_modal(io, read_signed_integer, :geometryW, info_byte, 2)
+    height = read_or_modal(io, read_signed_integer, :geometryH, info_byte, 3)
+    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
+    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+
+    lower_left_corner = Point{2, Int64}(x, y)
+    upper_right_corner = Point{2, Int64}(x + width, y + height)
+    rectangle = HyperRectangle{2, Int64}(lower_left_corner, upper_right_corner)
+    shape = Shape(rectangle, layer_number, datatype_number, repetition)
+    push!(cell.shapes, shape)
+end
+
+function parse_polygon(io::IO)
+    info_byte = read(io, UInt8)
+    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
+    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
+    point_list = read_or_modal(io, read_point_list, :polygonPointList, info_byte, 3)
+    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
+    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
     point_list .+= Point{2, Int64}(x, y)
     polygon = Polygon(point_list)
@@ -83,7 +141,7 @@ function parse_polygon(io::IO, modals::ModalVariables, cell::Cell)
     push!(cell.shapes, shape)
 end
 
-function parse_property(io::IO, ::ModalVariables, ::AbstractOasisData)
+function parse_property(io::IO)
     # We ignore properties. The code here is only meant to figure out how many bytes to skip.
     info_byte = read(io, UInt8)
     propname_explicit = bit_is_nonzero(info_byte, 6)
@@ -107,7 +165,7 @@ function parse_property(io::IO, ::ModalVariables, ::AbstractOasisData)
     end
 end
 
-function parse_cblock(io::IO, modals::ModalVariables, oas::Oasis)
+function parse_cblock(io::IO)
     comp_type = rui(io)
     @assert comp_type == 0x00 "Unknown compression type encountered"
     uncomp_byte_count = rui(io)
@@ -118,7 +176,7 @@ function parse_cblock(io::IO, modals::ModalVariables, oas::Oasis)
 
     while !eof(io_decompress)
         record_type = read(io_decompress, UInt8)
-        RECORD_PARSER_PER_TYPE[record_type + 1](io_decompress, modals, oas)
+        RECORD_PARSER_PER_TYPE[record_type + 1](io_decompress)
     end
     close(io_decompress)
 end
@@ -141,10 +199,10 @@ const RECORD_PARSER_PER_TYPE = (
     skip_record, #parse_cell_str, # CELL (14)
     parse_xyabsolute, # XYABSOLUTE (15)
     parse_xyrelative, # XYRELATIVE (16)
-    skip_record, #parse_placement, # PLACEMENT (17)
+    parse_placement, # PLACEMENT (17)
     skip_record, #parse_placement_mag_angle, # PLACEMENT (18)
     skip_record, #parse_text, # TEXT (19)
-    skip_record, #parse_rectangle, # RECTANGLE (20)
+    parse_rectangle, #parse_rectangle, # RECTANGLE (20)
     parse_polygon, # POLYGON (21)
     skip_record, #parse_path, # PATH (22)
     skip_record, #parse_trapezoid_ab, # TRAPEZOID (23)
