@@ -10,6 +10,7 @@ export PointGridRange
 export Shape
 
 include("read_data.jl")
+include("skip_data.jl")
 include("modal_variables.jl")
 include("structs.jl")
 include("parse_records.jl")

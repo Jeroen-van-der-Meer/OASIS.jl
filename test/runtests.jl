@@ -123,15 +123,13 @@ end
 @testset "Parse OASIS files" begin
     filenames = [
         # Uncompressed file containing single polygon
-        "polygon.oas",   # 69.800 μs (129 allocations: 6.16 KiB)
+        "polygon.oas",   # 65.000 μs (110 allocations: 5.43 KiB)
         # Layers; boxes; cell in another cell; repetitions
-        "boxes.oas"      # 87.200 μs (241 allocations: 153.14 KiB)
+        "boxes.oas"      # 83.000 μs (223 allocations: 152.46 KiB)
     ]
     for filename in filenames
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath)
         @test oas isa Oasis
     end
-    
-    # 
 end

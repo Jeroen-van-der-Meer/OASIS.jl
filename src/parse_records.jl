@@ -21,10 +21,6 @@ function parse_cellname_impl(io::IO)
     push!(oas.references.cellNames, reference)
 end
 
-parse_propname_impl(io::IO) = read_string(io)
-
-parse_propstring_impl(io::IO) = read_string(io)
-
 function parse_layername(io::IO)
     layername = read_string(io)
     layer_interval = read_interval(io)
@@ -54,7 +50,7 @@ function parse_cell_ref(io::IO)
     global cell = Cell([], [], cellname_number)
     while true
         record_type = peek(io, UInt8)
-        is_end_of_cell(record_type) ? break : read(io, UInt8)
+        is_end_of_cell(record_type) ? break : skip(io, 1)
         RECORD_PARSER_PER_TYPE[record_type + 1](io)
     end
     push!(oas.cells, cell)
@@ -148,9 +144,9 @@ function parse_property(io::IO)
     if propname_explicit
         propname_as_reference = bit_is_nonzero(info_byte, 7)
         if propname_as_reference
-            rui(io)
+            skip_integer(io)
         else
-            read_string(io)
+            skip_string(io)
         end
     end
     value_list_implicit = bit_is_nonzero(info_byte, 5)
@@ -160,7 +156,7 @@ function parse_property(io::IO)
             number_of_values = rui(io)
         end
         for _ in 1:number_of_values
-            read_property_value(io)
+            skip_property_value(io)
         end
     end
 end
@@ -168,7 +164,7 @@ end
 function parse_cblock(io::IO)
     comp_type = rui(io)
     @assert comp_type == 0x00 "Unknown compression type encountered"
-    uncomp_byte_count = rui(io)
+    skip_integer(io) # uncomp_byte_count
     comp_byte_count = rui(io)
     
     cblock_buffer = IOBuffer(read(io, comp_byte_count))
@@ -189,9 +185,9 @@ const RECORD_PARSER_PER_TYPE = (
     skip_record, #parse_cellname_ref, # CELLNAME (4)
     skip_record, #parse_textstring_impl, # TEXTSTRING (5)
     skip_record, #parse_textstring_ref, # TEXTSTRING (6) 
-    parse_propname_impl, # PROPNAME (7)
+    skip_string, # PROPNAME (7)
     skip_record, #parse_propname_ref, # PROPNAME (8)
-    parse_propstring_impl, # PROPSTRING (9)
+    skip_string, # PROPSTRING (9)
     skip_record, #parse_propstring_ref, # PROPSTRING (10)
     parse_layername, # LAYERNAME (11)
     parse_textlayername, # LAYERNAME (12)

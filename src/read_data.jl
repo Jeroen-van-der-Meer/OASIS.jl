@@ -208,7 +208,7 @@ function read_property_value(io::IO)
         return rui(io)
     elseif type == 0x09
         return read_signed_integer(io)
-    elseif type <= 0x0f
+    else
         # Not clear to me if this is correct. Is propstring-reference-number encoded in the
         # same way as a string?
         return read_string(io)
