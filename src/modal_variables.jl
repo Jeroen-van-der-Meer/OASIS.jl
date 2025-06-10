@@ -1,15 +1,15 @@
 Base.@kwdef mutable struct ModalVariables
     repetition::AbstractVector{Point2i} = []
-    placementX::Int64 = 0 # FIXME: Type
-    placementY::Int64 = 0 # FIXME: Type
+    placementX::Int64 = 0
+    placementY::Int64 = 0
     placementCell::UInt64 = 0
     layer::UInt64 = 0
     datatype::UInt64 = 0
-    textlayer::Int64 = 0 # FIXME: Type
-    texttype::Int64 = 0 # FIXME: Type
-    textX::Int64 = 0 # FIXME: Type
-    textY::Int64 = 0 # FIXME: Type
-    textString::Int64 = 0 # FIXME: Type
+    textlayer::UInt64 = 0
+    texttype::UInt64 = 0
+    textX::Int64 = 0
+    textY::Int64 = 0
+    textString::UInt64 = 0
     geometryX::Int64 = 0
     geometryY::Int64 = 0
     xyAbsolute::Bool = true

@@ -21,6 +21,20 @@ function parse_cellname_impl(io::IO)
     push!(oas.references.cellNames, reference)
 end
 
+function parse_cellname_ref(io::IO)
+    cellname = read_string(io)
+    cellname_number = rui(io)
+    reference = NumericReference(cellname, cellname_number)
+    push!(oas.references.cellNames, reference)
+end
+
+function parse_textstring_impl(io::IO)
+    textstring = read_string(io)
+    textstring_number = length(oas.references.textStrings)
+    reference = NumericReference(textstring, textstring_number)
+    push!(oas.references.textStrings, reference)
+end
+
 function parse_layername(io::IO)
     layername = read_string(io)
     layer_interval = read_interval(io)
@@ -101,6 +115,36 @@ function parse_placement(io::IO)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 5)
     placement = CellPlacement(cellname_number, location, rotation, 1.0, repetition)
     push!(cell.cells, placement)
+end
+
+function parse_text(io::IO)
+    info_byte = read(io, UInt8)
+    text_explicit = bit_is_nonzero(info_byte, 2)
+    if text_explicit
+        text_as_ref = bit_is_nonzero(info_byte, 3)
+        if text_as_ref
+            text_number = rui(io)
+        else
+            text = read_string(io)
+            text_number = cellname_to_cellname_number(text)
+            # If a string is used to denote the cellname, find the corresponding reference. If
+            # no such reference exists (yet?), create a random one ourselves.
+        end
+        # Update the modal variable. We choose to always save the reference number instead of
+        # the string.
+        modals.textString = text_number
+    else
+        text_number = modals.textString
+    end
+    textlayer_number = read_or_modal(io, rui, :textlayer, info_byte, 8)
+    texttype_number = read_or_modal(io, rui, :texttype, info_byte, 7)
+    x = read_or_modal(io, read_signed_integer, :textX, info_byte, 4)
+    y = read_or_modal(io, read_signed_integer, :textY, info_byte, 5)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+
+    text = Text(text_number, Point{2, Int64}(x, y), repetition)
+    shape = Shape(text, textlayer_number, texttype_number, repetition)
+    push!(cell.shapes, shape)
 end
 
 function parse_rectangle(io::IO)
@@ -335,8 +379,8 @@ const RECORD_PARSER_PER_TYPE = (
     parse_start, # START (1)
     skip_record, # END (2)
     parse_cellname_impl, # CELLNAME (3)
-    skip_record, #parse_cellname_ref, # CELLNAME (4)
-    skip_record, #parse_textstring_impl, # TEXTSTRING (5)
+    parse_cellname_ref, # CELLNAME (4)
+    parse_textstring_impl, # TEXTSTRING (5)
     skip_record, #parse_textstring_ref, # TEXTSTRING (6) 
     skip_string, # PROPNAME (7)
     skip_record, #parse_propname_ref, # PROPNAME (8)
@@ -350,7 +394,7 @@ const RECORD_PARSER_PER_TYPE = (
     parse_xyrelative, # XYRELATIVE (16)
     parse_placement, # PLACEMENT (17)
     skip_record, #parse_placement_mag_angle, # PLACEMENT (18)
-    skip_record, #parse_text, # TEXT (19)
+    parse_text, # TEXT (19)
     parse_rectangle, # RECTANGLE (20)
     parse_polygon, # POLYGON (21)
     skip_record, #parse_path, # PATH (22)

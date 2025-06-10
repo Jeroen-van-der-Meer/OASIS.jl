@@ -1,7 +1,7 @@
-struct Shape{T <: AbstractGeometry{2, Int64}}
+struct Shape{T}
     shape::T
-    layerNumber::UInt64
-    datatypeNumber::UInt64
+    layerNumber::UInt64 # If T = Text, this refers to textlayerNumber
+    datatypeNumber::UInt64 # If T = Text, this refers to texttypeNumber
     repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
 
@@ -44,6 +44,12 @@ end
 Base.@kwdef mutable struct Metadata
     version::VersionNumber = v"1.0"
     unit::Float64 = 1.0
+end
+
+struct Text
+    textNumber::UInt64
+    location::Point{2, Int64}
+    repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
 
 struct CellPlacement

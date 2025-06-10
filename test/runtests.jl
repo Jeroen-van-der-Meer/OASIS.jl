@@ -122,6 +122,7 @@ end
 
 @testset "Parse OASIS files" begin
     @testset "Polygon" begin
+        # Contains: Polygon with four vertices.
         filename = "polygon.oas" # 67.300 μs (111 allocations: 5.59 KiB)
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath)
@@ -142,8 +143,8 @@ end
             Point{2, Int64}(0, 1000), Point{2, Int64}(0, 0)
         ]
     end
-    
     @testset "Boxes" begin
+        # Contains: Two layers, cell placement with repetition, rectangles.
         filename = "boxes.oas" # 83.000 μs (223 allocations: 152.46 KiB)
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath)
@@ -170,11 +171,28 @@ end
         @test cellname == "TOP"
         placements = top_cell.cells
         @test length(placements) == 2
-        # FIXME: Not clear to me why there are two placements. It appears to be a quirk in the
-        # file itself rather than in the parser.
+        # There are two placements in the top cell rather than one. Underneath the 6x5 grid of
+        # rectangles, there's another rectangle.
         bottom_cell_placement = placements[1]
         @test bottom_cell_placement.location == Point{2, Int64}(-520, 2200)
+        # FIXME: Check the placement is correct, esp. the rotation
         @test bottom_cell_placement.rotation == 180
         @test bottom_cell_placement.repetition == PointGridRange((0, 0), 6, 5, (0, 30), (50, -30))
+    end
+    @testset "Circle" begin
+        # Contains: Circle (which klayout doesn't save as a circle), text.
+        filename = "circle.oas" # 96.200 μs (225 allocations: 228.01 KiB)
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath)
+        @test oas isa Oasis
+        ncell = length(oas.cells)
+        @test ncell == 2
+        circle_cell = oas.cells[1]
+        circle = circle_cell.shapes[1]
+        @test circle isa Shape{Polygon{2, Int64}}
+        text_cell = oas.cells[2]
+        text = text_cell.shapes[1]
+        text_string = OASIS.find_reference(text.shape.textNumber, oas.references.textStrings)
+        @test text_string == "This is not a circle"
     end
 end
