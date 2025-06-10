@@ -33,11 +33,7 @@ function skip_property_value(io::IO)
     type = read(io, UInt8)
     if type <= 0x07
         skip_real(io, type)
-    elseif type <= 0x09
-        skip_integer(io)
     else
-        # Not clear to me if this is correct. Is propstring-reference-number encoded in the
-        # same way as a string?
-        skip_string(io)
+        skip_integer(io)
     end
 end

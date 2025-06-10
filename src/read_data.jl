@@ -142,9 +142,9 @@ function Base.iterate(r::PointGridRange, i::Integer = zero(length(r)))
     r[i], i
 end
 
-collect_repetitions_x(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum([Point{2, Int64}(rui(io), 0) for _ in 1:(nrep - 1)]), (0, 0))
-collect_repetitions_y(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([Point{2, Int64}(0, rui(io)) for _ in 1:(nrep - 1)])), (0, 0))
-collect_repetitions_g(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([read_g_delta(io) for _ in 1:(nrep - 1)])), (0, 0))
+collect_repetitions_x(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum([Point{2, Int64}(rui(io), 0) for _ in 1:(nrep - 1)]), Point{2, Int64}(0, 0))
+collect_repetitions_y(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([Point{2, Int64}(0, rui(io)) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
+collect_repetitions_g(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([read_g_delta(io) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
 
 read_repetition_type_0(io::IO) = @error "Not implemented" # To be dealt with when we have modal vars
 read_repetition_type_1(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, (rui(io), 0), (0, rui(io)))
@@ -204,14 +204,10 @@ function read_property_value(io::IO)
     type = read(io, UInt8)
     if type <= 0x07
         return read_real(io, type)
-    elseif type == 0x08
-        return rui(io)
     elseif type == 0x09
         return read_signed_integer(io)
     else
-        # Not clear to me if this is correct. Is propstring-reference-number encoded in the
-        # same way as a string?
-        return read_string(io)
+        return rui(io)
     end
 end
 

@@ -88,13 +88,11 @@ function parse_placement(io::IO)
             # If a string is used to denote the cellname, find the corresponding reference. If
             # no such reference exists (yet?), create a random one ourselves.
         end
+        # Update the modal variable. We choose to always save the reference number instead of
+        # the string.
+        modals.placementCell = cellname_number
     else
-        cellname = modals.placementCell
-        if cellname isa String
-            cellname_number = cellname_to_cellname_number(cellname)
-        else
-            cellname_number = cellname
-        end
+        cellname_number = modals.placementCell
     end
     x = read_or_modal(io, read_signed_integer, :placementX, info_byte, 3)
     y = read_or_modal(io, read_signed_integer, :placementY, info_byte, 4)
@@ -107,10 +105,18 @@ end
 
 function parse_rectangle(io::IO)
     info_byte = read(io, UInt8)
+    is_square = bit_is_nonzero(info_byte, 1)
     layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
     datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
-    width = read_or_modal(io, read_signed_integer, :geometryW, info_byte, 2)
-    height = read_or_modal(io, read_signed_integer, :geometryH, info_byte, 3)
+    width = signed(read_or_modal(io, rui, :geometryW, info_byte, 2))
+    if is_square
+        # If rectangle is a square, the height is necessarily not logged, and the modal
+        # geometryH is set to the width.
+        height = width
+        modals.geometryH = width
+    else
+        height = signed(read_or_modal(io, rui, :geometryH, info_byte, 3))
+    end
     x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
     y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
@@ -131,6 +137,8 @@ function parse_polygon(io::IO)
     y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
+    pushfirst!(point_list, Point{2, Int64}(0, 0))
+    cumsum!(point_list, point_list)
     point_list .+= Point{2, Int64}(x, y)
     polygon = Polygon(point_list)
     shape = Shape(polygon, layer_number, datatype_number, repetition)
@@ -198,7 +206,7 @@ const RECORD_PARSER_PER_TYPE = (
     parse_placement, # PLACEMENT (17)
     skip_record, #parse_placement_mag_angle, # PLACEMENT (18)
     skip_record, #parse_text, # TEXT (19)
-    parse_rectangle, #parse_rectangle, # RECTANGLE (20)
+    parse_rectangle, # RECTANGLE (20)
     parse_polygon, # POLYGON (21)
     skip_record, #parse_path, # PATH (22)
     skip_record, #parse_trapezoid_ab, # TRAPEZOID (23)

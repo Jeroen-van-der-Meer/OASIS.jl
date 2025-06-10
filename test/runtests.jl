@@ -121,15 +121,60 @@ end
 end
 
 @testset "Parse OASIS files" begin
-    filenames = [
-        # Uncompressed file containing single polygon
-        "polygon.oas",   # 65.000 μs (110 allocations: 5.43 KiB)
-        # Layers; boxes; cell in another cell; repetitions
-        "boxes.oas"      # 83.000 μs (223 allocations: 152.46 KiB)
-    ]
-    for filename in filenames
+    @testset "Polygon" begin
+        filename = "polygon.oas" # 67.300 μs (111 allocations: 5.59 KiB)
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath)
         @test oas isa Oasis
+        ncell = length(oas.cells)
+        @test ncell == 1
+        top_cell = oas.cells[1]
+        cellname = OASIS.find_reference(top_cell.nameNumber, oas.references.cellNames)
+        @test cellname == "TOP"
+        subcells = top_cell.cells
+        @test isempty(subcells)
+        shapes = top_cell.shapes
+        @test length(shapes) == 1
+        polygon = top_cell.shapes[1].shape
+        @test polygon isa Polygon
+        @test polygon.exterior == [
+            Point{2, Int64}(-1000, -1000), Point{2, Int64}(-1000, 0),
+            Point{2, Int64}(0, 1000), Point{2, Int64}(0, 0)
+        ]
+    end
+    
+    @testset "Boxes" begin
+        filename = "boxes.oas" # 83.000 μs (223 allocations: 152.46 KiB)
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath)
+        @test oas isa Oasis
+        ncell = length(oas.cells)
+        @test ncell == 2
+        bottom_cell = oas.cells[1]
+        cellname = OASIS.find_reference(bottom_cell.nameNumber, oas.references.cellNames)
+        @test cellname == "BOTTOM"
+        @test length(oas.cells[1].shapes) == 1
+        rectangle = oas.cells[1].shapes[1]
+        layer_number = rectangle.layerNumber
+        datatype_number = rectangle.datatypeNumber
+        layername = OASIS.find_reference(layer_number, datatype_number, oas.references.layerNames)
+        @test layername == "TOP"
+        rectangle_shape = rectangle.shape
+        @test rectangle_shape isa HyperRectangle{2, Int64}
+        @test rectangle_shape == HyperRectangle{2, Int64}(
+            Point{2, Int64}(-190, 2870),
+            Point{2, Int64}(-180, 2880)
+        )
+        top_cell = oas.cells[2]
+        cellname = OASIS.find_reference(top_cell.nameNumber, oas.references.cellNames)
+        @test cellname == "TOP"
+        placements = top_cell.cells
+        @test length(placements) == 2
+        # FIXME: Not clear to me why there are two placements. It appears to be a quirk in the
+        # file itself rather than in the parser.
+        bottom_cell_placement = placements[1]
+        @test bottom_cell_placement.location == Point{2, Int64}(-520, 2200)
+        @test bottom_cell_placement.rotation == 180
+        @test bottom_cell_placement.repetition == PointGridRange((0, 0), 6, 5, (0, 30), (50, -30))
     end
 end

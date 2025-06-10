@@ -2,7 +2,7 @@ Base.@kwdef mutable struct ModalVariables
     repetition::AbstractVector{Point2i} = []
     placementX::Int64 = 0 # FIXME: Type
     placementY::Int64 = 0 # FIXME: Type
-    placementCell::Int64 = 0 # FIXME: Type
+    placementCell::UInt64 = 0
     layer::UInt64 = 0
     datatype::UInt64 = 0
     textlayer::Int64 = 0 # FIXME: Type
@@ -13,8 +13,8 @@ Base.@kwdef mutable struct ModalVariables
     geometryX::Int64 = 0
     geometryY::Int64 = 0
     xyAbsolute::Bool = true
-    geometryW::Int64 = 0 # FIXME: Type
-    geometryH::Int64 = 0 # FIXME: Type
+    geometryW::UInt64 = 0
+    geometryH::UInt64 = 0
     polygonPointList::Vector{Point2i} = []
     pathHalfwidth::Int64 = 0 # FIXME: Type
     pathPointList::Int64 = 0 # FIXME: Type
