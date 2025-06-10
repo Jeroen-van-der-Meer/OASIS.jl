@@ -145,6 +145,151 @@ function parse_polygon(io::IO)
     push!(cell.shapes, shape)
 end
 
+ctrapezoid_vertices_0(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, 0),
+    Point{2, Int64}(w - h, h),  Point{2, Int64}(0, h)]
+ctrapezoid_vertices_1(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w - h, 0),
+    Point{2, Int64}(w, h),      Point{2, Int64}(0, h)]
+ctrapezoid_vertices_2(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(0, w),
+    Point{2, Int64}(w, h),      Point{2, Int64}(h, h)]
+ctrapezoid_vertices_3(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(h, 0),      Point{2, Int64}(w, 0),
+    Point{2, Int64}(w, h),      Point{2, Int64}(0, h)]
+ctrapezoid_vertices_4(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, 0),
+    Point{2, Int64}(w - h, h),  Point{2, Int64}(h, h)]
+ctrapezoid_vertices_5(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(h, 0),      Point{2, Int64}(w - h, 0),
+    Point{2, Int64}(w, h),      Point{2, Int64}(0, h)]
+ctrapezoid_vertices_6(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w - h, 0),
+    Point{2, Int64}(w, h),      Point{2, Int64}(h, h)]
+ctrapezoid_vertices_7(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(h, 0),      Point{2, Int64}(w, 0),
+    Point{2, Int64}(w - h, h),  Point{2, Int64}(0, h)]
+ctrapezoid_vertices_8(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(0, w),
+    Point{2, Int64}(w, h - w),  Point{2, Int64}(0, h)]
+ctrapezoid_vertices_9(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(0, w),
+    Point{2, Int64}(w, h),      Point{2, Int64}(0, h - w)]
+ctrapezoid_vertices_10(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, w),
+    Point{2, Int64}(w, h),      Point{2, Int64}(0, h)]
+ctrapezoid_vertices_11(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(w, 0),      Point{2, Int64}(w, h),
+    Point{2, Int64}(0, h),      Point{2, Int64}(0, h - w)]
+ctrapezoid_vertices_12(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, w),
+    Point{2, Int64}(w, h - w),  Point{2, Int64}(0, h)]
+ctrapezoid_vertices_13(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(w, 0),      Point{2, Int64}(w, h),
+    Point{2, Int64}(0, h - w),  Point{2, Int64}(0, w)]
+ctrapezoid_vertices_14(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, w),
+    Point{2, Int64}(w, h),      Point{2, Int64}(0, h - w)]
+ctrapezoid_vertices_15(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(w, 0),      Point{2, Int64}(w, h - w),
+    Point{2, Int64}(0, h),      Point{2, Int64}(0, w)]
+ctrapezoid_vertices_16(w::UInt64, ::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, 0),
+    Point{2, Int64}(0, w)]
+ctrapezoid_vertices_17(w::UInt64, ::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, w),
+    Point{2, Int64}(0, w)]
+ctrapezoid_vertices_18(w::UInt64, ::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, 0),
+    Point{2, Int64}(w, w)]
+ctrapezoid_vertices_19(w::UInt64, ::UInt64) = [
+    Point{2, Int64}(w, 0),      Point{2, Int64}(w, w),
+    Point{2, Int64}(0, w)]
+ctrapezoid_vertices_20(::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(2h, 0),
+    Point{2, Int64}(h, h)]
+ctrapezoid_vertices_21(::UInt64, h::UInt64) = [
+    Point{2, Int64}(h, 0),      Point{2, Int64}(2h, h),
+    Point{2, Int64}(0, h)]
+ctrapezoid_vertices_22(w::UInt64, ::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, w),
+    Point{2, Int64}(0, 2w)]
+ctrapezoid_vertices_23(w::UInt64, ::UInt64) = [
+    Point{2, Int64}(w, 0),      Point{2, Int64}(w, 2w),
+    Point{2, Int64}(0, w)]
+ctrapezoid_vertices_24(w::UInt64, h::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, h)]
+ctrapezoid_vertices_25(w::UInt64, ::UInt64) = [
+    Point{2, Int64}(0, 0),      Point{2, Int64}(w, w)]
+
+const CTRAPEZOID_VERTICES_PER_TYPE = (
+    ctrapezoid_vertices_0,
+    ctrapezoid_vertices_1,
+    ctrapezoid_vertices_2,
+    ctrapezoid_vertices_3,
+    ctrapezoid_vertices_4,
+    ctrapezoid_vertices_5,
+    ctrapezoid_vertices_6,
+    ctrapezoid_vertices_7,
+    ctrapezoid_vertices_8,
+    ctrapezoid_vertices_9,
+    ctrapezoid_vertices_10,
+    ctrapezoid_vertices_11,
+    ctrapezoid_vertices_12,
+    ctrapezoid_vertices_13,
+    ctrapezoid_vertices_14,
+    ctrapezoid_vertices_15,
+    ctrapezoid_vertices_16,
+    ctrapezoid_vertices_17,
+    ctrapezoid_vertices_18,
+    ctrapezoid_vertices_19,
+    ctrapezoid_vertices_20,
+    ctrapezoid_vertices_21,
+    ctrapezoid_vertices_22,
+    ctrapezoid_vertices_23,
+    ctrapezoid_vertices_24,
+    ctrapezoid_vertices_25,
+)
+
+function parse_ctrapezoid(io::IO)
+    info_byte = read(io, UInt8)
+    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
+    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
+    ctrapezoid_type = read_or_modal(io, rui, :ctrapezoidType, info_byte, 1)
+    width = read_or_modal(io, rui, :geometryW, info_byte, 2)
+    height = read_or_modal(io, rui, :geometryH, info_byte, 3)
+    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
+    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+
+    vertices = CTRAPEZOID_VERTICES_PER_TYPE[ctrapezoid_type + 1](width, height)
+    vertices .+= Point{2, Int64}(x, y)
+    if ctrapezoid_type <= 0x0f
+        ctrapezoid = Polygon(vertices)
+    elseif ctrapezoid_type <= 0x17
+        ctrapezoid = Triangle{2, Int64}(vertices...)
+    else
+        ctrapezoid = HyperRectangle{2, Int64}(vertices...)
+    end
+    shape = Shape(ctrapezoid, layer_number, datatype_number, repetition)
+    push!(cell.shapes, shape)
+end
+
+function parse_circle(io::IO)
+    info_byte = read(io, UInt8)
+    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
+    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
+    radius = read_or_modal(io, rui, :circleRadius, info_byte, 3)
+    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
+    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+
+    center = Point{2, Int64}(x, y)
+    circle = HyperSphere{2, Int64}(center, radius)
+    shape = Shape(circle, layer_number, datatype_number, repetition)
+    push!(cell.shapes, shape)
+end
+
 function parse_property(io::IO)
     # We ignore properties. The code here is only meant to figure out how many bytes to skip.
     info_byte = read(io, UInt8)
