@@ -1,5 +1,5 @@
 Base.@kwdef mutable struct ModalVariables
-    repetition::AbstractVector{Point2i} = []
+    repetition::AbstractVector{Point{2, Int64}} = []
     placementX::Int64 = 0
     placementY::Int64 = 0
     placementCell::UInt64 = 0
@@ -15,11 +15,11 @@ Base.@kwdef mutable struct ModalVariables
     xyAbsolute::Bool = true
     geometryW::UInt64 = 0
     geometryH::UInt64 = 0
-    polygonPointList::Vector{Point2i} = []
-    pathHalfwidth::Int64 = 0 # FIXME: Type
-    pathPointList::Int64 = 0 # FIXME: Type
-    pathStartExtension::Int64 = 0 # FIXME: Type
-    pathEndExtension::Int64 = 0 # FIXME: Type
+    polygonPointList::Vector{Point{2, Int64}} = []
+    pathHalfwidth::UInt64 = 0
+    pathPointList::Vector{Point{2, Int64}} = []
+    pathStartExtension::Int64 = 0
+    pathEndExtension::Int64 = 0
     ctrapezoidType::Int64 = 0 # FIXME: Type
     circleRadius::Int64 = 0 # FIXME: Type
 end

@@ -195,4 +195,41 @@ end
         text_string = OASIS.find_reference(text.shape.textNumber, oas.references.textStrings)
         @test text_string == "This is not a circle"
     end
+    @testset "Paths" begin
+        # Contains: Some paths. It includes one with rounded ends. Weirdly enough, klayout
+        # chooses to save these ends as CIRCLE records, unlike actual circles.
+        filename = "paths.oas" # 77.500 μs (193 allocations: 80.21 KiB)
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath)
+        @test oas isa Oasis
+        ncell = length(oas.cells)
+        @test ncell == 1
+        top_cell = oas.cells[1]
+        nplacement = length(top_cell.cells)
+        @test nplacement == 0
+        shapes = [s.shape for s in top_cell.shapes]
+        @test length(shapes) == 6 # Four paths and two circles for the rounded path
+        path_1 = shapes[1]
+        @test path_1.points == Point{2, Int64}[(-508, 268), (-253, 22), (-342, 190), (-157, 176)]
+        @test path_1.width == 100
+        path_2 = shapes[2]
+        @test path_2.points == Point{2, Int64}[(-263, 431), (-116, 420), (-228, 315), (-182, 482)]
+        @test path_2.width == 50
+        # Third path is a rounded path which klayout saves using CIRCLE records at both ends.
+        path_3 = shapes[3]
+        @test path_3.points == Point{2, Int64}[(-343, 273), (-386, 294), (-351, 303)]
+        @test path_3.width == 10
+        start_circle = shapes[4]
+        @test start_circle.center == Point{2, Int64}(-343, 273)
+        @test start_circle.r == 5
+        end_circle = shapes[5]
+        @test end_circle.center == Point{2, Int64}(-351, 303)
+        @test end_circle.r == 5
+        # Fourth path is subject to change; due to the nonzero starting offset, its starting
+        # point is actually a fraction of the database unit. As it stands, a rounding takes
+        # place.
+        path_4 = shapes[6]
+        @test path_4.points == Point{2, Int64}[(-257, 236), (-255, 238), (-254, 237)]
+        @test path_4.width == 2
+    end
 end

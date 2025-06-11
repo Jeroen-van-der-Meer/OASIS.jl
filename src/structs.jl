@@ -52,6 +52,17 @@ struct Text
     repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
 
+"""
+    Path(points::AbstractVector{<:Point}, width)
+
+A Path is a polyline with finite width, or equivalently, a `GeometryBasis.LineString` with
+specified width.
+"""
+struct Path{Dim, T<:Real} <: AbstractGeometry{Dim, T}
+    points::Vector{Point{Dim, T}}
+    width::T
+end
+
 struct CellPlacement
     nameNumber::UInt64
     location::Point{2, Int64}

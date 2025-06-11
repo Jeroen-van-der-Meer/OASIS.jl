@@ -189,6 +189,77 @@ function parse_polygon(io::IO)
     push!(cell.shapes, shape)
 end
 
+function parse_path(io::IO)
+    info_byte = read(io, UInt8)
+    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
+    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
+    halfwidth = read_or_modal(io, rui, :pathHalfwidth, info_byte, 2)
+    extension_scheme_present = bit_is_nonzero(info_byte, 1)
+    if extension_scheme_present
+        extension_scheme = read(io, UInt8)
+        SS_bits = (extension_scheme >> 2) & 0x03
+        if SS_bits == 0x00
+            start_extension = modals.pathStartExtension
+            modals.pathStartExtension = start_extension
+        elseif SS_bits == 0x01
+            start_extension = 0
+            modals.pathStartExtension = start_extension
+        elseif SS_bits == 0x02
+            start_extension = halfwidth
+            modals.pathStartExtension = start_extension
+        else
+            start_extension = read_signed_integer(io)
+        end
+        EE_bits = extension_scheme & 0x03
+        if EE_bits == 0x00
+            end_extension = modals.pathEndExtension
+            modals.pathEndExtension = end_extension
+        elseif EE_bits == 0x01
+            end_extension = 0
+            modals.pathEndExtension = end_extension
+        elseif EE_bits == 0x02
+            end_extension = halfwidth
+            modals.pathEndExtension = end_extension
+        else
+            end_extension = read_signed_integer(io)
+        end
+    else
+        start_extension = modals.pathStartExtension
+        end_extension = modals.pathEndExtension
+    end
+    point_list = read_or_modal(io, read_point_list, :pathPointList, info_byte, 3)
+    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
+    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+
+    # Adjust point list based on start and end extension so that we don't have to log these
+    # parameters. The unfortunate downside is that there's no guarantee that the resulting point
+    # list will properly snap within the specified grid, and as such rounding errors may occur.
+    # That said, I cannot imagine this setting is used often in practice.
+    if !iszero(start_extension)
+        first_delta = first(point_list)
+        first_delta_normalized = first_delta ./ sqrt(first_delta[1]^2 + first_delta[2]^2)
+        adjustment_for_start = first_delta_normalized * start_extension
+        adjustment_for_start_rounded = round.(Int64, adjustment_for_start)
+        point_list[1] += adjustment_for_start_rounded
+        x -= adjustment_for_start_rounded[1]
+        y -= adjustment_for_start_rounded[2]
+    end
+    if !iszero(end_extension)
+        last_delta = last(point_list)
+        last_delta_normalized = last_delta ./ sqrt(last_delta[1]^2 + last_delta[2]^2)
+        adjustment_for_end = last_delta_normalized * end_extension
+        adjustment_for_end_rounded = round.(Int64, adjustment_for_end)
+        point_list[end] += adjustment_for_end_rounded
+    end
+    pushfirst!(point_list, Point{2, Int64}(0, 0))
+    cumsum!(point_list, point_list)
+    point_list .+= Point{2, Int64}(x, y)
+    path = Path(point_list, 2 * signed(halfwidth))
+    shape = Shape(path, layer_number, datatype_number, repetition)
+    push!(cell.shapes, shape)
+end
+
 ctrapezoid_vertices_0(w::UInt64, h::UInt64) = [
     Point{2, Int64}(0, 0),      Point{2, Int64}(w, 0),
     Point{2, Int64}(w - h, h),  Point{2, Int64}(0, h)]
@@ -397,12 +468,12 @@ const RECORD_PARSER_PER_TYPE = (
     parse_text, # TEXT (19)
     parse_rectangle, # RECTANGLE (20)
     parse_polygon, # POLYGON (21)
-    skip_record, #parse_path, # PATH (22)
+    parse_path, # PATH (22)
     skip_record, #parse_trapezoid_ab, # TRAPEZOID (23)
     skip_record, #parse_trapezoid_a, # TRAPEZOID (24)
     skip_record, #parse_trapezoid_b, # TRAPEZOID (25)
     skip_record, #parse_ctrapezoid, # CTRAPEZOID (26)
-    skip_record, #parse_circle, # CIRCLE (27)
+    parse_circle, # CIRCLE (27)
     parse_property, # PROPERTY (28)
     skip_record, #parse_modal_property, # PROPERTY (29)
     skip_record, #parse_xname_impl, # XNAME (30)
