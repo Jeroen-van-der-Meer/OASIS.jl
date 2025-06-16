@@ -117,6 +117,43 @@ function parse_placement(io::IO)
     push!(cell.cells, placement)
 end
 
+function parse_placement_mag_angle(io::IO)
+    info_byte = read(io, UInt8)
+    cellname_explicit = bit_is_nonzero(info_byte, 1)
+    if cellname_explicit
+        cellname_as_ref = bit_is_nonzero(info_byte, 2)
+        if cellname_as_ref
+            cellname_number = rui(io)
+        else
+            cellname = read_string(io)
+            cellname_number = cellname_to_cellname_number(cellname)
+            # If a string is used to denote the cellname, find the corresponding reference. If
+            # no such reference exists (yet?), create a random one ourselves.
+        end
+        # Update the modal variable. We choose to always save the reference number instead of
+        # the string.
+        modals.placementCell = cellname_number
+    else
+        cellname_number = modals.placementCell
+    end
+    if bit_is_nonzero(info_byte, 6)
+        magnification = read_real(io)
+    else
+        magnification = 1.0
+    end
+    if bit_is_nonzero(info_byte, 7)
+        rotation = read_real(io)
+    else
+        rotation = 0.0
+    end
+    x = read_or_modal(io, read_signed_integer, :placementX, info_byte, 3)
+    y = read_or_modal(io, read_signed_integer, :placementY, info_byte, 4)
+    location = Point{2, Int64}(x, y)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 5)
+    placement = CellPlacement(cellname_number, location, rotation, magnification, repetition)
+    push!(cell.cells, placement)
+end
+
 function parse_text(io::IO)
     info_byte = read(io, UInt8)
     text_explicit = bit_is_nonzero(info_byte, 2)
@@ -464,7 +501,7 @@ const RECORD_PARSER_PER_TYPE = (
     parse_xyabsolute, # XYABSOLUTE (15)
     parse_xyrelative, # XYRELATIVE (16)
     parse_placement, # PLACEMENT (17)
-    skip_record, #parse_placement_mag_angle, # PLACEMENT (18)
+    parse_placement_mag_angle, # PLACEMENT (18)
     parse_text, # TEXT (19)
     parse_rectangle, # RECTANGLE (20)
     parse_polygon, # POLYGON (21)
