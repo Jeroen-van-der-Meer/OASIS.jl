@@ -1,6 +1,7 @@
 using GeometryBasics
 using OASIS
 using Test
+import Suppressor
 
 @testset "Read data" begin
     @testset "Read unsigned integers" begin
@@ -231,5 +232,35 @@ end
         path_4 = shapes[6]
         @test path_4.points == Point{2, Int64}[(-257, 236), (-255, 238), (-254, 237)]
         @test path_4.width == 2
+    end
+    @testset "Nested" begin
+        # Contains: A bunch of cells with random shapes nested in each other with varying
+        # rotations and magnifications.
+        filename = "nested.oas" # 111.700 μs (375 allocations: 232.12 KiB)
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath)
+        s = Suppressor.@capture_out show_cells(oas)
+        @test s == """
+TOP
+├─ BOTTOM2 (3×)
+│  └─ ROCKBOTTOM
+├─ MIDDLE2
+│  └─ BOTTOM (2×)
+└─ MIDDLE
+   ├─ BOTTOM2 (2×)
+   │  └─ ROCKBOTTOM
+   └─ BOTTOM"""
+        s = Suppressor.@capture_out Base.show(oas)
+        @test s == """
+OASIS file v1.0 with the following cells: 
+TOP
+├─ BOTTOM2 (3×)
+│  └─ ROCKBOTTOM
+├─ MIDDLE2
+│  └─ BOTTOM (2×)
+└─ MIDDLE
+   ├─ BOTTOM2 (2×)
+   │  └─ ⋯
+   └─ BOTTOM"""
     end
 end

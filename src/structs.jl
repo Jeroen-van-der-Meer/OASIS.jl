@@ -72,13 +72,30 @@ struct CellPlacement
 end
 
 struct Cell
-    shapes::Vector{Shape} # Might have references to other cells within them
+    shapes::Vector{Shape} # Might have references to other cells within them?
     cells::Vector{CellPlacement} # Other cells
     nameNumber::UInt64
 end
 
 Base.@kwdef struct Oasis
-    cells::Vector{Cell} = [] # Might need to be the top cell instead
+    cells::Vector{Cell} = []
     metadata::Metadata = Metadata()
     references::References = References()
 end
+
+struct CellHierarchy
+    hierarchy::Dict{UInt64, Vector{UInt64}}
+    root::UInt64
+    
+    function CellHierarchy(h)
+        all_nodes = Set(keys(h))
+        child_nodes = Set(v for children in values(h) for v in children)
+        root = first(setdiff(all_nodes, child_nodes))
+        return new(h, root)
+    end
+end
+
+CellHierarchy(oas::Oasis) = CellHierarchy(
+    Dict(c.nameNumber => [i.nameNumber for i in c.cells]
+    for c in oas.cells)
+)
