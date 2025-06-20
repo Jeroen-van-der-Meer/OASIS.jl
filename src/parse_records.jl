@@ -9,7 +9,7 @@ function parse_start(io::IO)
     if iszero(offset_flag)
         # We ignore the 12 integers corresponding to the table offset structure.
         for _ in 1:12
-            rui(io)
+            skip_integer(io)
         end
     end
 end
@@ -35,6 +35,31 @@ function parse_textstring_impl(io::IO)
     push!(oas.references.textStrings, reference)
 end
 
+function parse_textstring_ref(io::IO)
+    textstring = read_string(io)
+    textstring_number = rui(io)
+    reference = NumericReference(textstring, textstring_number)
+    push!(oas.references.textStrings, reference)
+end
+
+function parse_propname_impl(io::IO)
+    skip_string(io)
+end
+
+function parse_propname_ref(io::IO)
+    skip_string(io)
+    skip_integer(io)
+end
+
+function parse_propstring_impl(io::IO)
+    skip_string(io)
+end
+
+function parse_propstring_ref(io::IO)
+    skip_string(io)
+    skip_integer(io)
+end
+
 function parse_layername(io::IO)
     layername = read_string(io)
     layer_interval = read_interval(io)
@@ -56,6 +81,7 @@ function is_end_of_cell(next_record::UInt8)
     # END, CELLNAME, TEXTSTRING, PROPNAME, PROPSTRING, LAYERNAME, CELL, XNAME
     return (0x02 <= next_record <= 0x0e) || (next_record == 0x1e) || (next_record == 0x1f)
 end
+
 function parse_cell_ref(io::IO)
     # Whenever a cell is encountered, the following modal variables are reset.
     modals.xyAbsolute = true
@@ -68,6 +94,19 @@ function parse_cell_ref(io::IO)
 
     cellname_number = rui(io)
     global cell = Cell([], [], cellname_number)
+    parse_cell(io)
+    push!(oas.cells, cell)
+end
+
+function parse_cell_str(io::IO)
+    cellname_string = read_string(io)
+    cellname_number = cellname_to_cellname_number(cellname)
+    global cell = Cell([], [], cellname_number)
+    parse_cell(io)
+    push!(oas.cells, cell)
+end
+
+function parse_cell(io::IO)
     while true
         # The reason we look ahead one byte is because we cannot tell in advance when the CELL
         # record ends. If it ends, this function will likely return to the main parser which
@@ -76,7 +115,7 @@ function parse_cell_ref(io::IO)
         is_end_of_cell(record_type) ? break : skip(io, 1)
         RECORD_PARSER_PER_TYPE[record_type + 1](io)
     end
-    push!(oas.cells, cell)
+
 end
 
 function parse_xyabsolute(::IO)
@@ -108,8 +147,6 @@ function parse_placement(io::IO)
         else
             cellname = read_string(io)
             cellname_number = cellname_to_cellname_number(cellname)
-            # If a string is used to denote the cellname, find the corresponding reference. If
-            # no such reference exists (yet?), create a random one ourselves.
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
@@ -490,15 +527,15 @@ const RECORD_PARSER_PER_TYPE = (
     parse_cellname_impl, # CELLNAME (3)
     parse_cellname_ref, # CELLNAME (4)
     parse_textstring_impl, # TEXTSTRING (5)
-    skip_record, #parse_textstring_ref, # TEXTSTRING (6) 
-    skip_string, # PROPNAME (7)
-    skip_record, #parse_propname_ref, # PROPNAME (8)
-    skip_string, # PROPSTRING (9)
-    skip_record, #parse_propstring_ref, # PROPSTRING (10)
+    parse_textstring_ref, # TEXTSTRING (6) 
+    parse_propname_impl, # PROPNAME (7)
+    parse_propname_ref, # PROPNAME (8)
+    parse_propstring_impl, # PROPSTRING (9)
+    parse_propstring_ref, # PROPSTRING (10)
     parse_layername, # LAYERNAME (11)
     parse_textlayername, # LAYERNAME (12)
     parse_cell_ref, # CELL (13)
-    skip_record, #parse_cell_str, # CELL (14)
+    parse_cell_str, # CELL (14)
     parse_xyabsolute, # XYABSOLUTE (15)
     parse_xyrelative, # XYRELATIVE (16)
     parse_placement, # PLACEMENT (17)
@@ -513,7 +550,7 @@ const RECORD_PARSER_PER_TYPE = (
     skip_record, #parse_ctrapezoid, # CTRAPEZOID (26)
     parse_circle, # CIRCLE (27)
     parse_property, # PROPERTY (28)
-    skip_record, #parse_modal_property, # PROPERTY (29)
+    skip_record, # PROPERTY (29)
     skip_record, #parse_xname_impl, # XNAME (30)
     skip_record, #parse_xname_ref, # XNAME (31)
     skip_record, #parse_xelement, # XELEMENT (32)
