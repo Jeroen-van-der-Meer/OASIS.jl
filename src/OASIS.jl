@@ -29,7 +29,7 @@ function oasisread(filename::AbstractString)
     while true
         record_type = read(file, UInt8)
         record_type == 0x02 && break # Stop when encountering END record. Ignoring checksum.
-        RECORD_PARSER_PER_TYPE[record_type + 1](file)
+        parse_record(file, record_type)
     end
     close(file)
     return oas

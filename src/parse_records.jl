@@ -89,7 +89,7 @@ function parse_cell(io::IO)
         # also needs to read a byte to find the next record.
         record_type = peek(io, UInt8)
         is_end_of_cell(record_type) ? break : skip(io, 1)
-        RECORD_PARSER_PER_TYPE[record_type + 1](io)
+        parse_record(io, record_type)
     end
 
 end
@@ -369,18 +369,6 @@ function parse_trapezoid(io::IO, delta_a_explicit::Bool, delta_b_explicit::Bool)
     push!(cell.shapes, shape)
 end
 
-function parse_trapezoid_ab(io::IO)
-    parse_trapezoid(io, true, true)
-end
-
-function parse_trapezoid_a(io::IO)
-    parse_trapezoid(io, true, false)
-end
-
-function parse_trapezoid_b(io::IO)
-    parse_trapezoid(io, false, true)
-end
-
 ctrapezoid_vertices_0(w::UInt64, h::UInt64) = [
     Point{2, Int64}(0, 0),      Point{2, Int64}(w, 0),
     Point{2, Int64}(w - h, h),  Point{2, Int64}(0, h)]
@@ -559,45 +547,81 @@ function parse_cblock(io::IO)
 
     while !eof(io_decompress)
         record_type = read(io_decompress, UInt8)
-        RECORD_PARSER_PER_TYPE[record_type + 1](io_decompress)
+        parse_record(io_decompress, record_type)
     end
     close(io_decompress)
 end
 
-const RECORD_PARSER_PER_TYPE = (
-    skip_record, # PAD (0)
-    parse_start, # START (1)
-    skip_record, # END (2)
-    parse_cellname_impl, # CELLNAME (3)
-    parse_cellname_ref, # CELLNAME (4)
-    parse_textstring_impl, # TEXTSTRING (5)
-    parse_textstring_ref, # TEXTSTRING (6) 
-    parse_propname_impl, # PROPNAME (7)
-    parse_propname_ref, # PROPNAME (8)
-    parse_propstring_impl, # PROPSTRING (9)
-    parse_propstring_ref, # PROPSTRING (10)
-    parse_layername, # LAYERNAME (11)
-    parse_textlayername, # LAYERNAME (12)
-    parse_cell_ref, # CELL (13)
-    parse_cell_str, # CELL (14)
-    parse_xyabsolute, # XYABSOLUTE (15)
-    parse_xyrelative, # XYRELATIVE (16)
-    parse_placement, # PLACEMENT (17)
-    parse_placement_mag_angle, # PLACEMENT (18)
-    parse_text, # TEXT (19)
-    parse_rectangle, # RECTANGLE (20)
-    parse_polygon, # POLYGON (21)
-    parse_path, # PATH (22)
-    parse_trapezoid_ab, # TRAPEZOID (23)
-    parse_trapezoid_a, # TRAPEZOID (24)
-    parse_trapezoid_b, # TRAPEZOID (25)
-    parse_ctrapezoid, # CTRAPEZOID (26)
-    parse_circle, # CIRCLE (27)
-    parse_property, # PROPERTY (28)
-    skip_record, # PROPERTY (29)
-    skip_record, #parse_xname_impl, # XNAME (30)
-    skip_record, #parse_xname_ref, # XNAME (31)
-    skip_record, #parse_xelement, # XELEMENT (32)
-    skip_record, #parse_xgeometry, # XGEOMETRY (33)
-    parse_cblock # CBLOCK (34)
-)
+function parse_record(io::IO, record_type::UInt8)
+    if record_type == 0
+        skip_record(io)
+    elseif record_type == 1
+        parse_start(io)
+    elseif record_type == 2
+        skip_record(io)
+    elseif record_type == 3
+        parse_cellname_impl(io)
+    elseif record_type == 4
+        parse_cellname_ref(io)
+    elseif record_type == 5
+        parse_textstring_impl(io)
+    elseif record_type == 6
+        parse_textstring_ref(io)
+    elseif record_type == 7
+        parse_propname_impl(io)
+    elseif record_type == 8
+        parse_propname_ref(io)
+    elseif record_type == 9
+        parse_propstring_impl(io)
+    elseif record_type == 10
+        parse_propstring_ref(io)
+    elseif record_type == 11
+        parse_layername(io)
+    elseif record_type == 12
+        parse_textlayername(io)
+    elseif record_type == 13
+        parse_cell_ref(io)
+    elseif record_type == 14
+        parse_cell_str(io)
+    elseif record_type == 15
+        parse_xyabsolute(io)
+    elseif record_type == 16
+        parse_xyrelative(io)
+    elseif record_type == 17
+        parse_placement(io)
+    elseif record_type == 18
+        parse_placement_mag_angle(io)
+    elseif record_type == 19
+        parse_text(io)
+    elseif record_type == 20
+        parse_rectangle(io)
+    elseif record_type == 21
+        parse_polygon(io)
+    elseif record_type == 22
+        parse_path(io)
+    elseif record_type == 23
+        parse_trapezoid(io, true, true)
+    elseif record_type == 24
+        parse_trapezoid(io, true, false)
+    elseif record_type == 25
+        parse_trapezoid(io, false, true)
+    elseif record_type == 26
+        parse_ctrapezoid(io)
+    elseif record_type == 27
+        parse_circle(io)
+    elseif record_type == 28
+        parse_property(io)
+    elseif record_type == 29
+        skip_record(io)
+    elseif record_type == 30
+        skip_record(io)
+    elseif record_type == 31
+        skip_record(io)
+    elseif record_type == 32
+        skip_record(io)
+    elseif record_type == 33
+        skip_record(io)
+    elseif record_type == 34
+        parse_cblock(io)
+    end
+end
