@@ -62,3 +62,14 @@ end
 function bit_is_nonzero(byte::UInt8, position)
     return isone(byte >> (8 - position) & 0x01)
 end
+
+# PLACEMENT records can either use CELLNAME references or strings to refer to what cell is being
+# placed. For consistency, we wish to always log a reference number. However, there is no
+# guarantee that such reference exists, so we'll have to manually create it.
+function cellname_to_cellname_number(cellname::String)
+    cellname_number = find_reference(number, oas.references.cellNames)
+    if isnothing(cellname_number)
+        cellname_number = rand(UInt64)
+        push!(oas.references.cellNames, NumericReference(cellname, cellname_number))
+    end
+end

@@ -82,6 +82,18 @@ function is_end_of_cell(next_record::UInt8)
     return (0x02 <= next_record <= 0x0e) || (next_record == 0x1e) || (next_record == 0x1f)
 end
 
+function parse_cell(io::IO)
+    while true
+        # The reason we look ahead one byte is because we cannot tell in advance when the CELL
+        # record ends. If it ends, this function will likely return to the main parser which
+        # also needs to read a byte to find the next record.
+        record_type = peek(io, UInt8)
+        is_end_of_cell(record_type) ? break : skip(io, 1)
+        RECORD_PARSER_PER_TYPE[record_type + 1](io)
+    end
+
+end
+
 function parse_cell_ref(io::IO)
     # Whenever a cell is encountered, the following modal variables are reset.
     modals.xyAbsolute = true
@@ -106,35 +118,12 @@ function parse_cell_str(io::IO)
     push!(oas.cells, cell)
 end
 
-function parse_cell(io::IO)
-    while true
-        # The reason we look ahead one byte is because we cannot tell in advance when the CELL
-        # record ends. If it ends, this function will likely return to the main parser which
-        # also needs to read a byte to find the next record.
-        record_type = peek(io, UInt8)
-        is_end_of_cell(record_type) ? break : skip(io, 1)
-        RECORD_PARSER_PER_TYPE[record_type + 1](io)
-    end
-
-end
-
 function parse_xyabsolute(::IO)
     modals.xyAbsolute = true
 end
 
 function parse_xyrelative(::IO)
     modals.xyAbsolute = false
-end
-
-# PLACEMENT records can either use CELLNAME references or strings to refer to what cell is being
-# placed. For consistency, we wish to always log a reference number. However, there is no
-# guarantee that such reference exists, so we'll have to manually create it.
-function cellname_to_cellname_number(cellname::String)
-    cellname_number = find_reference(number, oas.references.cellNames)
-    if isnothing(cellname_number)
-        cellname_number = rand(UInt64)
-        push!(oas.references.cellNames, NumericReference(cellname, cellname_number))
-    end
 end
 
 function parse_placement(io::IO)
@@ -335,6 +324,61 @@ function parse_path(io::IO)
     path = Path(point_list, 2 * signed(halfwidth))
     shape = Shape(path, layer_number, datatype_number, repetition)
     push!(cell.shapes, shape)
+end
+
+function parse_trapezoid(io::IO, delta_a_explicit::Bool, delta_b_explicit::Bool)
+    info_byte = read(io, UInt8)
+    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
+    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
+    width = read_or_modal(io, rui, :geometryW, info_byte, 2)
+    height = read_or_modal(io, rui, :geometryH, info_byte, 3)
+    if delta_a_explicit
+        # The spec indicates that delta-a and delta-b are 1-deltas. These are merely signed
+        # integers with an implied direction. We choose to incorporate the directionality when
+        # assembling the vertices.
+        delta_a = read_signed_integer(io)
+    else
+        delta_a = 0
+    end
+    if delta_b_explicit
+        delta_b = read_signed_integer(io)
+    else
+        delta_b = 0
+    end
+    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
+    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+
+    if bit_is_nonzero(info_byte, 1) # Vertical orientation
+        vertices = [
+            Point{2, Int64}(0, 0),
+            Point{2, Int64}(width, delta_a),
+            Point{2, Int64}(width, height - delta_b),
+            Point{2, Int64}(0, h)
+        ]
+    else # Horizontal orientation
+        vertices = [
+            Point{2, Int64}(0, h),
+            Point{2, Int64}(delta_a, 0),
+            Point{2, Int64}(width - delta_b, 0),
+            Point{2, Int64}(width, height)
+        ]
+    end
+    vertices .+= Point{2, Int64}(x, y)
+    trapezoid = Polygon(vertices)
+    shape = Shape(trapezoid, layer_number, datatype_number, repetition)
+    push!(cell.shapes, shape)
+end
+
+function parse_trapezoid_ab(io::IO)
+    parse_trapezoid(io, true, true)
+end
+
+function parse_trapezoid_a(io::IO)
+    parse_trapezoid(io, true, false)
+end
+
+function parse_trapezoid_b(io::IO)
+    parse_trapezoid(io, false, true)
 end
 
 ctrapezoid_vertices_0(w::UInt64, h::UInt64) = [
@@ -544,10 +588,10 @@ const RECORD_PARSER_PER_TYPE = (
     parse_rectangle, # RECTANGLE (20)
     parse_polygon, # POLYGON (21)
     parse_path, # PATH (22)
-    skip_record, #parse_trapezoid_ab, # TRAPEZOID (23)
-    skip_record, #parse_trapezoid_a, # TRAPEZOID (24)
-    skip_record, #parse_trapezoid_b, # TRAPEZOID (25)
-    skip_record, #parse_ctrapezoid, # CTRAPEZOID (26)
+    parse_trapezoid_ab, # TRAPEZOID (23)
+    parse_trapezoid_a, # TRAPEZOID (24)
+    parse_trapezoid_b, # TRAPEZOID (25)
+    parse_ctrapezoid, # CTRAPEZOID (26)
     parse_circle, # CIRCLE (27)
     parse_property, # PROPERTY (28)
     skip_record, # PROPERTY (29)
