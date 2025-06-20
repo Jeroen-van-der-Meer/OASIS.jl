@@ -57,12 +57,21 @@ function is_end_of_cell(next_record::UInt8)
     return (0x02 <= next_record <= 0x0e) || (next_record == 0x1e) || (next_record == 0x1f)
 end
 function parse_cell_ref(io::IO)
-    # The reason we look ahead one byte is because we cannot tell in advance when the CELL
-    # record ends. If it ends, this function will likely return to the main parser which also
-    # needs to read a byte to find the next record.
+    # Whenever a cell is encountered, the following modal variables are reset.
+    modals.xyAbsolute = true
+    modals.placementX = 0
+    modals.placementY = 0
+    modals.geometryX = 0
+    modals.geometryY = 0
+    modals.textX = 0
+    modals.textY = 0
+
     cellname_number = rui(io)
     global cell = Cell([], [], cellname_number)
     while true
+        # The reason we look ahead one byte is because we cannot tell in advance when the CELL
+        # record ends. If it ends, this function will likely return to the main parser which
+        # also needs to read a byte to find the next record.
         record_type = peek(io, UInt8)
         is_end_of_cell(record_type) ? break : skip(io, 1)
         RECORD_PARSER_PER_TYPE[record_type + 1](io)
@@ -108,8 +117,7 @@ function parse_placement(io::IO)
     else
         cellname_number = modals.placementCell
     end
-    x = read_or_modal(io, read_signed_integer, :placementX, info_byte, 3)
-    y = read_or_modal(io, read_signed_integer, :placementY, info_byte, 4)
+    x, y = read_or_modal_xy(io, :placementX, :placementY, info_byte, 3)
     location = Point{2, Int64}(x, y)
     rotation = ((info_byte >> 1) & 0x03) * 90
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 5)
@@ -146,8 +154,7 @@ function parse_placement_mag_angle(io::IO)
     else
         rotation = 0.0
     end
-    x = read_or_modal(io, read_signed_integer, :placementX, info_byte, 3)
-    y = read_or_modal(io, read_signed_integer, :placementY, info_byte, 4)
+    x, y = read_or_modal_xy(io, :placementX, :placementY, info_byte, 3)
     location = Point{2, Int64}(x, y)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 5)
     placement = CellPlacement(cellname_number, location, rotation, magnification, repetition)
@@ -175,8 +182,7 @@ function parse_text(io::IO)
     end
     textlayer_number = read_or_modal(io, rui, :textlayer, info_byte, 8)
     texttype_number = read_or_modal(io, rui, :texttype, info_byte, 7)
-    x = read_or_modal(io, read_signed_integer, :textX, info_byte, 4)
-    y = read_or_modal(io, read_signed_integer, :textY, info_byte, 5)
+    x, y = read_or_modal_xy(io, :textX, :textY, info_byte, 4)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
     text = Text(text_number, Point{2, Int64}(x, y), repetition)
@@ -198,8 +204,7 @@ function parse_rectangle(io::IO)
     else
         height = signed(read_or_modal(io, rui, :geometryH, info_byte, 3))
     end
-    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
-    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
     lower_left_corner = Point{2, Int64}(x, y)
@@ -214,8 +219,7 @@ function parse_polygon(io::IO)
     layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
     datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
     point_list = read_or_modal(io, read_point_list, :polygonPointList, info_byte, 3)
-    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
-    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
     pushfirst!(point_list, Point{2, Int64}(0, 0))
@@ -265,8 +269,7 @@ function parse_path(io::IO)
         end_extension = modals.pathEndExtension
     end
     point_list = read_or_modal(io, read_point_list, :pathPointList, info_byte, 3)
-    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
-    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
     # Adjust point list based on start and end extension so that we don't have to log these
@@ -410,8 +413,7 @@ function parse_ctrapezoid(io::IO)
     ctrapezoid_type = read_or_modal(io, rui, :ctrapezoidType, info_byte, 1)
     width = read_or_modal(io, rui, :geometryW, info_byte, 2)
     height = read_or_modal(io, rui, :geometryH, info_byte, 3)
-    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
-    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
     vertices = CTRAPEZOID_VERTICES_PER_TYPE[ctrapezoid_type + 1](width, height)
@@ -432,8 +434,7 @@ function parse_circle(io::IO)
     layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
     datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
     radius = read_or_modal(io, rui, :circleRadius, info_byte, 3)
-    x = read_or_modal(io, read_signed_integer, :geometryX, info_byte, 4)
-    y = read_or_modal(io, read_signed_integer, :geometryY, info_byte, 5)
+    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
     repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
 
     center = Point{2, Int64}(x, y)
