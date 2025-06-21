@@ -1,8 +1,8 @@
-function rui(io::IO) # read_unsigned_integer; using shorthand since this function is used often
+function rui(state) # read_unsigned_integer; using shorthand since this function is used often
     output = 0
     shift = 0
     while true
-        b = read(io, UInt8)
+        b = read_byte(state)
         output += UInt64(b & 0x7F) << shift
         b & 0x80 == 0 && break
         shift += 7
@@ -16,49 +16,54 @@ function unsigned_to_signed(x::UInt64)
     iszero(sign) ? output : -output
 end
 
-function read_signed_integer(io::IO)
-    unsigned_output = rui(io)
+function read_signed_integer(state)
+    unsigned_output = rui(state)
     return unsigned_to_signed(unsigned_output)
 end
 
-read_positive_whole_number(io::IO) = signed(rui(io))
-read_negative_whole_number(io::IO) = -signed(rui(io))
-read_positive_reciprocal(io::IO) = 1 / rui(io)
-read_negative_reciprocal(io::IO) = -1 / rui(io)
-read_positive_ratio(io::IO) = read_positive_whole_number(io) / read_positive_whole_number(io)
-read_negative_ratio(io::IO) = read_negative_whole_number(io) / read_positive_whole_number(io)
-read_four_byte_float(io::IO) = Float64(read(io, Float32))
-read_eight_byte_float(io::IO) = read(io, Float64)
+read_positive_whole_number(state) = signed(rui(state))
+read_negative_whole_number(state) = -signed(rui(state))
+read_positive_reciprocal(state) = 1 / rui(state)
+read_negative_reciprocal(state) = -1 / rui(state)
+read_positive_ratio(state) = read_positive_whole_number(state) / read_positive_whole_number(state)
+read_negative_ratio(state) = read_negative_whole_number(state) / read_positive_whole_number(state)
+read_four_byte_float(state) = Float64(read(stateBuffer(read_bytes(state, 4)), Float32))
+read_eight_byte_float(state) = read(IOBuffer(read_bytes(state, 8)), Float64)
 
-const REAL_READER_PER_FORMAT = (
-    read_positive_whole_number,
-    read_negative_whole_number,
-    read_positive_reciprocal,
-    read_negative_reciprocal,
-    read_positive_ratio,
-    read_negative_ratio,
-    read_four_byte_float,
-    read_eight_byte_float
-)
-
-function read_real(io::IO, format::UInt8)
-    return REAL_READER_PER_FORMAT[format + 1](io)
+function read_real(state, format::UInt8)
+    if format == 0x00
+        return read_positive_whole_number(state)
+    elseif format == 0x01
+        return read_negative_whole_number(state)
+    elseif format == 0x02
+        return read_positive_reciprocal(state)
+    elseif format == 0x03
+        return read_negative_reciprocal(state)
+    elseif format == 0x04
+        return read_positive_ratio(state)
+    elseif format == 0x05
+        return read_negative_ratio(state)
+    elseif format == 0x06
+        return read_four_byte_float(state)
+    else
+        return read_eight_byte_float(state)
+    end
 end
 
-function read_real(io::IO)
-    format = read(io, UInt8)
-    return read_real(io, format)
+function read_real(state)
+    format = read_byte(state)
+    return read_real(state, format)
 end
 
-function read_string(io::IO)
-    length = rui(io)
-    s = read(io, length)
+function read_string(state)
+    length = rui(state)
+    s = read_bytes(state, length)
     return String(s)
 end
 
-function read_1_delta(io::IO, dir)
+function read_1_delta(state, dir)
     # dir 0: east/west; dir 1: north/south
-    mag = read_signed_integer(io)
+    mag = read_signed_integer(state)
     return iszero(dir) ? Point{2, Int64}(mag, 0) : Point{2, Int64}(0, mag)
 end
 
@@ -71,42 +76,51 @@ northwest_integer(mag::UInt64) = Point{2, Int64}(-signed(mag), signed(mag))
 southwest_integer(mag::UInt64) = Point{2, Int64}(-signed(mag), -signed(mag))
 southeast_integer(mag::UInt64) = Point{2, Int64}(signed(mag), -signed(mag))
 
-const DELTA_READER_PER_DIRECTION = (
-    east_integer,
-    north_integer,
-    west_integer,
-    south_integer,
-    northeast_integer,
-    northwest_integer,
-    southwest_integer,
-    southeast_integer
-)
+function read_delta(dir::UInt64, magnitude::UInt64)
+    if dir == 0x00000000
+        return east_integer(magnitude)
+    elseif dir == 0x00000001
+        return north_integer(magnitude)
+    elseif dir == 0x00000002
+        return west_integer(magnitude)
+    elseif dir == 0x00000003
+        return south_integer(magnitude)
+    elseif dir == 0x00000004
+        return northeast_integer(magnitude)
+    elseif dir == 0x00000005
+        return northwest_integer(magnitude)
+    elseif dir == 0x00000006
+        return southwest_integer(magnitude)
+    else
+        return southeast_integer(magnitude)
+    end
+end
 
 function read_2_delta(Δ::UInt64)
     dir = Δ & 0x03 # Last 2 bits
     magnitude = Δ >> 2 # Remaining bits
-    return DELTA_READER_PER_DIRECTION[dir + 1](magnitude)
+    return read_delta(dir, magnitude)
 end
 
-read_2_delta(io::IO) = read_2_delta(rui(io))
+read_2_delta(state) = read_2_delta(rui(state))
 
 function read_3_delta(Δ::UInt64)
     dir = Δ & 0x07 # Last 3 bits
     magnitude = Δ >> 3 # Remaining bits
-    return DELTA_READER_PER_DIRECTION[dir + 1](magnitude)
+    return read_delta(dir, magnitude)
 end
 
-read_3_delta(io::IO) = read_3_delta(rui(io))
+read_3_delta(state) = read_3_delta(rui(state))
 
-function read_g_delta(io::IO)
-    Δ = rui(io)
+function read_g_delta(state)
+    Δ = rui(state)
     form = Δ & 0x01 # Last bit
     Δ >>= 1
     # g-delta comes in two forms
     if form == 0x00
         return read_3_delta(Δ) # Remaining bits to be read out as 3-delta
     else
-        Δ2 = rui(io)
+        Δ2 = rui(state)
         return Point{2, Int64}(unsigned_to_signed(Δ), unsigned_to_signed(Δ2))
     end
 end
@@ -142,74 +156,89 @@ function Base.iterate(r::PointGridRange, i::Integer = zero(length(r)))
     r[i], i
 end
 
-collect_repetitions_x(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum([Point{2, Int64}(rui(io), 0) for _ in 1:(nrep - 1)]), Point{2, Int64}(0, 0))
-collect_repetitions_y(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([Point{2, Int64}(0, rui(io)) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
-collect_repetitions_g(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([read_g_delta(io) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
+collect_repetitions_x(state, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum([Point{2, Int64}(rui(state), 0) for _ in 1:(nrep - 1)]), Point{2, Int64}(0, 0))
+collect_repetitions_y(state, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([Point{2, Int64}(0, rui(state)) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
+collect_repetitions_g(state, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([read_g_delta(state) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
 
-read_repetition_type_0(::IO) = modals.repetition
-read_repetition_type_1(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, (rui(io), 0), (0, rui(io)))
-read_repetition_type_2(io::IO) = PointGridRange((0, 0), rui(io) + 2, 1, (rui(io), 0), (1, 1))
-read_repetition_type_3(io::IO) = PointGridRange((0, 0), 1, rui(io) + 2, (1, 1), (0, rui(io)))
-read_repetition_type_4(io::IO) = collect_repetitions_x(io, rui(io) + 2)
-read_repetition_type_5(io::IO) = collect_repetitions_x(io, rui(io) + 2; grid = signed(rui(io)))
-read_repetition_type_6(io::IO) = collect_repetitions_y(io, rui(io) + 2)
-read_repetition_type_7(io::IO) = collect_repetitions_y(io, rui(io) + 2; grid = signed(rui(io)))
-read_repetition_type_8(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, read_g_delta(io), read_g_delta(io))
-read_repetition_type_9(io::IO) = PointGridRange((0, 0), rui(io) + 2, 1, read_g_delta(io), (1, 1))
-read_repetition_type_10(io::IO) = collect_repetitions_g(io, rui(io) + 2)
-read_repetition_type_11(io::IO) = collect_repetitions_g(io, rui(io) + 2; grid = signed(rui(io)))
+read_repetition_type_0(state) = state.mod.repetition
+read_repetition_type_1(state) = PointGridRange((0, 0), rui(state) + 2, rui(state) + 2, (rui(state), 0), (0, rui(state)))
+read_repetition_type_2(state) = PointGridRange((0, 0), rui(state) + 2, 1, (rui(state), 0), (1, 1))
+read_repetition_type_3(state) = PointGridRange((0, 0), 1, rui(state) + 2, (1, 1), (0, rui(state)))
+read_repetition_type_4(state) = collect_repetitions_x(state, rui(state) + 2)
+read_repetition_type_5(state) = collect_repetitions_x(state, rui(state) + 2; grid = signed(rui(state)))
+read_repetition_type_6(state) = collect_repetitions_y(state, rui(state) + 2)
+read_repetition_type_7(state) = collect_repetitions_y(state, rui(state) + 2; grid = signed(rui(state)))
+read_repetition_type_8(state) = PointGridRange((0, 0), rui(state) + 2, rui(state) + 2, read_g_delta(state), read_g_delta(state))
+read_repetition_type_9(state) = PointGridRange((0, 0), rui(state) + 2, 1, read_g_delta(state), (1, 1))
+read_repetition_type_10(state) = collect_repetitions_g(state, rui(state) + 2)
+read_repetition_type_11(state) = collect_repetitions_g(state, rui(state) + 2; grid = signed(rui(state)))
 
-const REPETITION_READER_PER_TYPE = (
-    read_repetition_type_0,
-    read_repetition_type_1,
-    read_repetition_type_2,
-    read_repetition_type_3,
-    read_repetition_type_4,
-    read_repetition_type_5,
-    read_repetition_type_6,
-    read_repetition_type_7,
-    read_repetition_type_8,
-    read_repetition_type_9,
-    read_repetition_type_10,
-    read_repetition_type_11
-)
-
-function read_repetition(io::IO)
-    type = read(io, UInt8)
-    return REPETITION_READER_PER_TYPE[type + 1](io)
-end
-
-read_1_delta_list_horizontal_first(io::IO, vc::UInt64) = [read_1_delta(io, i % 2) for i in 0:(vc - 1)]
-read_1_delta_list_vertical_first(io::IO, vc::UInt64) = [read_1_delta(io, i % 2) for i in 1:vc]
-read_2_delta_list(io::IO, vc::UInt64) = [read_2_delta(io) for _ in 1:vc]
-read_3_delta_list(io::IO, vc::UInt64) = [read_3_delta(io) for _ in 1:vc]
-read_g_delta_list(io::IO, vc::UInt64) = [read_g_delta(io) for _ in 1:vc]
-
-const POINT_LIST_READER_PER_TYPE = (
-    read_1_delta_list_horizontal_first,
-    read_1_delta_list_vertical_first,
-    read_2_delta_list,
-    read_3_delta_list,
-    read_g_delta_list,
-    cumsum ∘ read_g_delta_list
-)
-
-function read_point_list(io::IO)
-    type = read(io, UInt8)
-    vertex_count = rui(io)
-    return POINT_LIST_READER_PER_TYPE[type + 1](io, vertex_count)
-end
-
-function read_property_value(io::IO)
-    type = read(io, UInt8)
-    if type <= 0x07
-        return read_real(io, type)
+function read_repetition(state)
+    type = read_byte(state)
+    # Ordering is changed based on what appears to be used most often in practice.
+    if type == 0x00
+        return read_repetition_type_0(state)
+    elseif type == 0x01
+        return read_repetition_type_1(state)
+    elseif type == 0x08
+        return read_repetition_type_8(state)
+    elseif type == 0x02
+        return read_repetition_type_2(state)
+    elseif type == 0x03
+        return read_repetition_type_3(state)
+    elseif type == 0x0b
+        return read_repetition_type_11(state)
+    elseif type == 0x0a
+        return read_repetition_type_10(state)
     elseif type == 0x09
-        return read_signed_integer(io)
+        return read_repetition_type_9(state)
+    elseif type == 0x04
+        return read_repetition_type_4(state)
+    elseif type == 0x05
+        return read_repetition_type_5(state)
+    elseif type == 0x06
+        return read_repetition_type_6(state)
+    elseif type == 0x07
+        return read_repetition_type_7(state)
+    end
+end
+
+
+read_1_delta_list_horizontal_first(state, vc::UInt64) = [read_1_delta(state, i % 2) for i in 0:(vc - 1)]
+read_1_delta_list_vertical_first(state, vc::UInt64) = [read_1_delta(state, i % 2) for i in 1:vc]
+read_2_delta_list(state, vc::UInt64) = [read_2_delta(state) for _ in 1:vc]
+read_3_delta_list(state, vc::UInt64) = [read_3_delta(state) for _ in 1:vc]
+read_g_delta_list(state, vc::UInt64) = [read_g_delta(state) for _ in 1:vc]
+
+function read_point_list(state)
+    type = read_byte(state)
+    vertex_count = rui(state)
+    # Ordering is changed based on what appears to be used most often in practice.
+    if type == 0x01
+        return read_1_delta_list_vertical_first(state, vertex_count)
+    elseif type == 0x04
+        return read_g_delta_list(state, vertex_count)
+    elseif type == 0x00
+        return read_1_delta_list_horizontal_first(state, vertex_count)
+    elseif type == 0x02
+        return read_2_delta_list(state, vertex_count)
+    elseif type == 0x03
+        return read_3_delta_list(state, vertex_count)
+    elseif type == 0x05
+        return cumsum(read_g_delta_list(state, vertex_count))
+    end
+end
+
+function read_property_value(state)
+    type = read_byte(state)
+    if type <= 0x07
+        return read_real(state, type)
+    elseif type == 0x09
+        return read_signed_integer(state)
     elseif 0x0a <= type <= 0x0c
-        return read_string(io)
+        return read_string(state)
     else
-        return rui(io)
+        return rui(state)
     end
 end
 
@@ -220,21 +249,36 @@ end
 
 Base.in(p::UInt64, i::Interval) = i.low <= p <= i.high
 
-read_interval_type_0(io::IO) = Interval(0, typemax(UInt64))
-read_interval_type_1(io::IO) = Interval(0, rui(io))
-read_interval_type_2(io::IO) = Interval(rui(io), typemax(UInt64))
-read_interval_type_3(io::IO) = (x = rui(io); Interval(x, x))
-read_interval_type_4(io::IO) = Interval(rui(io), rui(io))
+read_interval_type_0(state) = Interval(0, typemax(UInt64))
+read_interval_type_1(state) = Interval(0, rui(state))
+read_interval_type_2(state) = Interval(rui(state), typemax(UInt64))
+read_interval_type_3(state) = (x = rui(state); Interval(x, x))
+read_interval_type_4(state) = Interval(rui(state), rui(state))
 
-const INTERVAL_READER_PER_TYPE = (
-    read_interval_type_0,
-    read_interval_type_1,
-    read_interval_type_2,
-    read_interval_type_3,
-    read_interval_type_4
-)
+function read_interval(state)
+    type = read_byte(state)
+    # Ordering is changed based on what appears to be used most often in practice.
+    if type == 0x03
+        return read_interval_type_3(state)
+    elseif type == 0x00
+        return read_interval_type_0(state)
+    elseif type == 0x01
+        return read_interval_type_1(state)
+    elseif type == 0x02
+        return read_interval_type_2(state)
+    elseif type == 0x04
+        return read_interval_type_4(state)
+    end
+end
 
-function read_interval(io::IO)
-    type = read(io, UInt8)
-    return INTERVAL_READER_PER_TYPE[type + 1](io)
+function read_byte(state)
+    @inbounds b = state.buf[state.pos]
+    state.pos += 1
+    return b
+end
+
+function read_bytes(state, nbytes::Integer)
+    @inbounds b = state.buf[state.pos:(state.pos + nbytes - 1)]
+    state.pos += nbytes
+    return b
 end

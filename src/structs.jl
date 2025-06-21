@@ -83,6 +83,18 @@ Base.@kwdef struct Oasis
     references::References = References()
 end
 
+mutable struct ParserState
+    oas::Oasis # Contents of the OASIS file.
+    currentCell::Cell # Current cell we're looking at.
+    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
+    pos::Int64 # Byte position in buffer.
+    mod::ModalVariables # Modal variables according to OASIS spec.
+end
+
+function ParserState(buf::Vector{UInt8})
+    return ParserState(Oasis(), Cell([], [], 0), buf, 1, ModalVariables())
+end
+
 struct CellHierarchy
     hierarchy::Dict{UInt64, Vector{UInt64}}
     root::UInt64

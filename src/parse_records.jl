@@ -1,79 +1,79 @@
-skip_record(::IO) = return
+skip_record(state) = return
 
-function parse_start(io::IO)
-    version = VersionNumber(read_string(io))
-    oas.metadata.version = version
-    unit = read_real(io)
-    oas.metadata.unit = 1e6 / unit
-    offset_flag = rui(io)
+function parse_start(state)
+    version = VersionNumber(read_string(state))
+    state.oas.metadata.version = version
+    unit = read_real(state)
+    state.oas.metadata.unit = 1e6 / unit
+    offset_flag = rui(state)
     if iszero(offset_flag)
         # We ignore the 12 integers corresponding to the table offset structure.
         for _ in 1:12
-            skip_integer(io)
+            skip_integer(state)
         end
     end
 end
 
-function parse_cellname_impl(io::IO)
-    cellname = read_string(io)
-    cellname_number = length(oas.references.cellNames)
+function parse_cellname_impl(state)
+    cellname = read_string(state)
+    cellname_number = length(state.oas.references.cellNames)
     reference = NumericReference(cellname, cellname_number)
-    push!(oas.references.cellNames, reference)
+    push!(state.oas.references.cellNames, reference)
 end
 
-function parse_cellname_ref(io::IO)
-    cellname = read_string(io)
-    cellname_number = rui(io)
+function parse_cellname_ref(state)
+    cellname = read_string(state)
+    cellname_number = rui(state)
     reference = NumericReference(cellname, cellname_number)
-    push!(oas.references.cellNames, reference)
+    push!(state.oas.references.cellNames, reference)
 end
 
-function parse_textstring_impl(io::IO)
-    textstring = read_string(io)
-    textstring_number = length(oas.references.textStrings)
+function parse_textstring_impl(state)
+    textstring = read_string(state)
+    textstring_number = length(state.oas.references.textStrings)
     reference = NumericReference(textstring, textstring_number)
-    push!(oas.references.textStrings, reference)
+    push!(state.oas.references.textStrings, reference)
 end
 
-function parse_textstring_ref(io::IO)
-    textstring = read_string(io)
-    textstring_number = rui(io)
+function parse_textstring_ref(state)
+    textstring = read_string(state)
+    textstring_number = rui(state)
     reference = NumericReference(textstring, textstring_number)
-    push!(oas.references.textStrings, reference)
+    push!(state.oas.references.textStrings, reference)
 end
 
-function parse_propname_impl(io::IO)
-    skip_string(io)
+function parse_propname_impl(state)
+    skip_string(state)
 end
 
-function parse_propname_ref(io::IO)
-    skip_string(io)
-    skip_integer(io)
+function parse_propname_ref(state)
+    skip_string(state)
+    skip_integer(state)
 end
 
-function parse_propstring_impl(io::IO)
-    skip_string(io)
+function parse_propstring_impl(state)
+    skip_string(state)
 end
 
-function parse_propstring_ref(io::IO)
-    skip_string(io)
-    skip_integer(io)
+function parse_propstring_ref(state)
+    skip_string(state)
+    skip_integer(state)
 end
 
-function parse_layername(io::IO)
-    layername = read_string(io)
-    layer_interval = read_interval(io)
-    datatype_interval = read_interval(io)
+function parse_layername(state)
+    layername = read_string(state)
+    layer_interval = read_interval(state)
+    datatype_interval = read_interval(state)
     layer_reference = LayerReference(layername, layer_interval, datatype_interval)
-    push!(oas.references.layerNames, layer_reference)
+    push!(state.oas.references.layerNames, layer_reference)
 end
 
-function parse_textlayername(io::IO)
-    layername = read_string(io)
-    layer_interval = read_interval(io)
-    datatype_interval = read_interval(io)
+function parse_textlayername(state)
+    layername = read_string(state)
+    layer_interval = read_interval(state)
+    datatype_interval = read_interval(state)
     layer_reference = LayerReference(layername, layer_interval, datatype_interval)
-    push!(oas.references.textLayerNames, layer_reference)
+    push!(state.oas.references.textLayerNames, layer_reference)
 end
 
 function is_end_of_cell(next_record::UInt8)
@@ -82,221 +82,224 @@ function is_end_of_cell(next_record::UInt8)
     return (0x02 <= next_record <= 0x0e) || (next_record == 0x1e) || (next_record == 0x1f)
 end
 
-function parse_cell(io::IO)
+function parse_cell(state)
+    # Whenever a cell is encountered, the following modal variables are reset.
+    state.mod.xyAbsolute = true
+    state.mod.placementX = 0
+    state.mod.placementY = 0
+    state.mod.geometryX = 0
+    state.mod.geometryY = 0
+    state.mod.textX = 0
+    state.mod.textY = 0
+
     while true
         # The reason we look ahead one byte is because we cannot tell in advance when the CELL
         # record ends. If it ends, this function will likely return to the main parser which
         # also needs to read a byte to find the next record.
-        record_type = peek(io, UInt8)
-        is_end_of_cell(record_type) ? break : skip(io, 1)
-        RECORD_PARSER_PER_TYPE[record_type + 1](io)
+        @inbounds record_type = state.buf[state.pos]
+        is_end_of_cell(record_type) ? break : state.pos += 1
+        parse_record(record_type, state)
     end
-
 end
 
-function parse_cell_ref(io::IO)
-    # Whenever a cell is encountered, the following modal variables are reset.
-    modals.xyAbsolute = true
-    modals.placementX = 0
-    modals.placementY = 0
-    modals.geometryX = 0
-    modals.geometryY = 0
-    modals.textX = 0
-    modals.textY = 0
+function parse_cell_ref(state)
+    cellname_number = rui(state)
+    cell = Cell([], [], cellname_number)
+    state.currentCell = cell
 
-    cellname_number = rui(io)
-    global cell = Cell([], [], cellname_number)
-    parse_cell(io)
-    push!(oas.cells, cell)
+    parse_cell(state)
+    push!(state.oas.cells, state.currentCell)
 end
 
-function parse_cell_str(io::IO)
-    cellname_string = read_string(io)
-    cellname_number = cellname_to_cellname_number(cellname)
-    global cell = Cell([], [], cellname_number)
-    parse_cell(io)
-    push!(oas.cells, cell)
+function parse_cell_str(state)
+    cellname_string = read_string(state)
+    cellname_number = cellname_to_cellname_number(state, cellname_string)
+    cell = Cell([], [], cellname_number)
+    state.currentCell = cell
+
+    parse_cell(state)
+    push!(state.oas.cells, state.currentCell)
 end
 
-function parse_xyabsolute(::IO)
-    modals.xyAbsolute = true
+function parse_xyabsolute(state)
+    state.mod.xyAbsolute = true
 end
 
-function parse_xyrelative(::IO)
-    modals.xyAbsolute = false
+function parse_xyrelative(state)
+    state.mod.xyAbsolute = false
 end
 
-function parse_placement(io::IO)
-    info_byte = read(io, UInt8)
+function parse_placement(state)
+    info_byte = read_byte(state)
     cellname_explicit = bit_is_nonzero(info_byte, 1)
     if cellname_explicit
         cellname_as_ref = bit_is_nonzero(info_byte, 2)
         if cellname_as_ref
-            cellname_number = rui(io)
+            cellname_number = rui(state)
         else
-            cellname = read_string(io)
-            cellname_number = cellname_to_cellname_number(cellname)
+            cellname = read_string(state)
+            cellname_number = cellname_to_cellname_number(state, cellname)
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
-        modals.placementCell = cellname_number
+        state.mod.placementCell = cellname_number
     else
-        cellname_number = modals.placementCell
+        cellname_number = state.mod.placementCell
     end
-    x, y = read_or_modal_xy(io, :placementX, :placementY, info_byte, 3)
+    x, y = read_or_modal_xy(state, Val(:placementX), Val(:placementY), info_byte, 3)
     location = Point{2, Int64}(x, y)
     rotation = ((info_byte >> 1) & 0x03) * 90
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 5)
+    repetition = read_repetition(state, info_byte, 5)
     placement = CellPlacement(cellname_number, location, rotation, 1.0, repetition)
-    push!(cell.cells, placement)
+    push!(state.currentCell.cells, placement)
 end
 
-function parse_placement_mag_angle(io::IO)
-    info_byte = read(io, UInt8)
+function parse_placement_mag_angle(state)
+    info_byte = read_byte(state)
     cellname_explicit = bit_is_nonzero(info_byte, 1)
     if cellname_explicit
         cellname_as_ref = bit_is_nonzero(info_byte, 2)
         if cellname_as_ref
-            cellname_number = rui(io)
+            cellname_number = rui(state)
         else
-            cellname = read_string(io)
-            cellname_number = cellname_to_cellname_number(cellname)
+            cellname = read_string(state)
+            cellname_number = cellname_to_cellname_number(state, cellname)
             # If a string is used to denote the cellname, find the corresponding reference. If
             # no such reference exists (yet?), create a random one ourselves.
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
-        modals.placementCell = cellname_number
+        state.mod.placementCell = cellname_number
     else
-        cellname_number = modals.placementCell
+        cellname_number = state.mod.placementCell
     end
     if bit_is_nonzero(info_byte, 6)
-        magnification = read_real(io)
+        magnification = read_real(state)
     else
         magnification = 1.0
     end
     if bit_is_nonzero(info_byte, 7)
-        rotation = read_real(io)
+        rotation = read_real(state)
     else
         rotation = 0.0
     end
-    x, y = read_or_modal_xy(io, :placementX, :placementY, info_byte, 3)
+    x, y = read_or_modal_xy(state, Val(:placementX), Val(:placementY), info_byte, 3)
     location = Point{2, Int64}(x, y)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 5)
+    repetition = read_repetition(state, info_byte, 5)
     placement = CellPlacement(cellname_number, location, rotation, magnification, repetition)
-    push!(cell.cells, placement)
+    push!(state.currentCell.cells, placement)
 end
 
-function parse_text(io::IO)
-    info_byte = read(io, UInt8)
+function parse_text(state)
+    info_byte = read_byte(state)
     text_explicit = bit_is_nonzero(info_byte, 2)
     if text_explicit
         text_as_ref = bit_is_nonzero(info_byte, 3)
         if text_as_ref
-            text_number = rui(io)
+            text_number = rui(state)
         else
-            text = read_string(io)
-            text_number = cellname_to_cellname_number(text)
+            text = read_string(state)
+            text_number = cellname_to_cellname_number(state, text)
             # If a string is used to denote the cellname, find the corresponding reference. If
             # no such reference exists (yet?), create a random one ourselves.
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
-        modals.textString = text_number
+        state.mod.textString = text_number
     else
-        text_number = modals.textString
+        text_number = state.mod.textString
     end
-    textlayer_number = read_or_modal(io, rui, :textlayer, info_byte, 8)
-    texttype_number = read_or_modal(io, rui, :texttype, info_byte, 7)
-    x, y = read_or_modal_xy(io, :textX, :textY, info_byte, 4)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+    textlayer_number = read_or_modal(state, rui, Val(:textlayer), info_byte, 8)
+    texttype_number = read_or_modal(state, rui, Val(:texttype), info_byte, 7)
+    x, y = read_or_modal_xy(state, Val(:textX), Val(:textY), info_byte, 4)
+    repetition = read_repetition(state, info_byte, 6)
 
     text = Text(text_number, Point{2, Int64}(x, y), repetition)
     shape = Shape(text, textlayer_number, texttype_number, repetition)
-    push!(cell.shapes, shape)
+    push!(state.currentCell.shapes, shape)
 end
 
-function parse_rectangle(io::IO)
-    info_byte = read(io, UInt8)
+function parse_rectangle(state)
+    info_byte = read_byte(state)
     is_square = bit_is_nonzero(info_byte, 1)
-    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
-    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
-    width = signed(read_or_modal(io, rui, :geometryW, info_byte, 2))
+    layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
+    datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
+    width = signed(read_or_modal(state, rui, Val(:geometryW), info_byte, 2))
     if is_square
         # If rectangle is a square, the height is necessarily not logged, and the modal
         # geometryH is set to the width.
         height = width
-        modals.geometryH = width
+        state.mod.geometryH = width
     else
-        height = signed(read_or_modal(io, rui, :geometryH, info_byte, 3))
+        height = signed(read_or_modal(state, rui, Val(:geometryH), info_byte, 3))
     end
-    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+    x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
+    repetition = read_repetition(state, info_byte, 6)
 
     lower_left_corner = Point{2, Int64}(x, y)
     upper_right_corner = Point{2, Int64}(x + width, y + height)
     rectangle = HyperRectangle{2, Int64}(lower_left_corner, upper_right_corner)
     shape = Shape(rectangle, layer_number, datatype_number, repetition)
-    push!(cell.shapes, shape)
+    push!(state.currentCell.shapes, shape)
 end
 
-function parse_polygon(io::IO)
-    info_byte = read(io, UInt8)
-    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
-    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
-    point_list = read_or_modal(io, read_point_list, :polygonPointList, info_byte, 3)
-    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+function parse_polygon(state)
+    info_byte = read_byte(state)
+    layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
+    datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
+    point_list = read_or_modal(state, read_point_list, Val(:polygonPointList), info_byte, 3)
+    x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
+    repetition = read_repetition(state, info_byte, 6)
 
     pushfirst!(point_list, Point{2, Int64}(0, 0))
     cumsum!(point_list, point_list)
     point_list .+= Point{2, Int64}(x, y)
     polygon = Polygon(point_list)
     shape = Shape(polygon, layer_number, datatype_number, repetition)
-    push!(cell.shapes, shape)
+    push!(state.currentCell.shapes, shape)
 end
 
-function parse_path(io::IO)
-    info_byte = read(io, UInt8)
-    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
-    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
-    halfwidth = read_or_modal(io, rui, :pathHalfwidth, info_byte, 2)
+function parse_path(state)
+    info_byte = read_byte(state)
+    layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
+    datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
+    halfwidth = read_or_modal(state, rui, Val(:pathHalfwidth), info_byte, 2)
     extension_scheme_present = bit_is_nonzero(info_byte, 1)
     if extension_scheme_present
-        extension_scheme = read(io, UInt8)
+        extension_scheme = read_byte(state)
         SS_bits = (extension_scheme >> 2) & 0x03
         if SS_bits == 0x00
-            start_extension = modals.pathStartExtension
-            modals.pathStartExtension = start_extension
+            start_extension = state.mod.pathStartExtension
+            state.mod.pathStartExtension = start_extension
         elseif SS_bits == 0x01
             start_extension = 0
-            modals.pathStartExtension = start_extension
+            state.mod.pathStartExtension = start_extension
         elseif SS_bits == 0x02
             start_extension = halfwidth
-            modals.pathStartExtension = start_extension
+            state.mod.pathStartExtension = start_extension
         else
-            start_extension = read_signed_integer(io)
+            start_extension = read_signed_integer(state)
         end
         EE_bits = extension_scheme & 0x03
         if EE_bits == 0x00
-            end_extension = modals.pathEndExtension
-            modals.pathEndExtension = end_extension
+            end_extension = state.mod.pathEndExtension
+            state.mod.pathEndExtension = end_extension
         elseif EE_bits == 0x01
             end_extension = 0
-            modals.pathEndExtension = end_extension
+            state.mod.pathEndExtension = end_extension
         elseif EE_bits == 0x02
             end_extension = halfwidth
-            modals.pathEndExtension = end_extension
+            state.mod.pathEndExtension = end_extension
         else
-            end_extension = read_signed_integer(io)
+            end_extension = read_signed_integer(state)
         end
     else
-        start_extension = modals.pathStartExtension
-        end_extension = modals.pathEndExtension
+        start_extension = state.mod.pathStartExtension
+        end_extension = state.mod.pathEndExtension
     end
-    point_list = read_or_modal(io, read_point_list, :pathPointList, info_byte, 3)
-    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+    point_list = read_or_modal(state, read_point_list, Val(:pathPointList), info_byte, 3)
+    x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
+    repetition = read_repetition(state, info_byte, 6)
 
     # Adjust point list based on start and end extension so that we don't have to log these
     # parameters. The unfortunate downside is that there's no guarantee that the resulting point
@@ -323,30 +326,30 @@ function parse_path(io::IO)
     point_list .+= Point{2, Int64}(x, y)
     path = Path(point_list, 2 * signed(halfwidth))
     shape = Shape(path, layer_number, datatype_number, repetition)
-    push!(cell.shapes, shape)
+    push!(state.currentCell.shapes, shape)
 end
 
-function parse_trapezoid(io::IO, delta_a_explicit::Bool, delta_b_explicit::Bool)
-    info_byte = read(io, UInt8)
-    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
-    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
-    width = read_or_modal(io, rui, :geometryW, info_byte, 2)
-    height = read_or_modal(io, rui, :geometryH, info_byte, 3)
+function parse_trapezoid(state, delta_a_explicit::Bool, delta_b_explicit::Bool)
+    info_byte = read_byte(state)
+    layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
+    datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
+    width = read_or_modal(state, rui, Val(:geometryW), info_byte, 2)
+    height = read_or_modal(state, rui, Val(:geometryH), info_byte, 3)
     if delta_a_explicit
         # The spec indicates that delta-a and delta-b are 1-deltas. These are merely signed
         # integers with an implied direction. We choose to incorporate the directionality when
         # assembling the vertices.
-        delta_a = read_signed_integer(io)
+        delta_a = read_signed_integer(state)
     else
         delta_a = 0
     end
     if delta_b_explicit
-        delta_b = read_signed_integer(io)
+        delta_b = read_signed_integer(state)
     else
         delta_b = 0
     end
-    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+    x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
+    repetition = read_repetition(state, info_byte, 6)
 
     if bit_is_nonzero(info_byte, 1) # Vertical orientation
         vertices = [
@@ -366,19 +369,19 @@ function parse_trapezoid(io::IO, delta_a_explicit::Bool, delta_b_explicit::Bool)
     vertices .+= Point{2, Int64}(x, y)
     trapezoid = Polygon(vertices)
     shape = Shape(trapezoid, layer_number, datatype_number, repetition)
-    push!(cell.shapes, shape)
+    push!(state.currentCell.shapes, shape)
 end
 
-function parse_trapezoid_ab(io::IO)
-    parse_trapezoid(io, true, true)
+function parse_trapezoid_ab(state)
+    parse_trapezoid(state, true, true)
 end
 
-function parse_trapezoid_a(io::IO)
-    parse_trapezoid(io, true, false)
+function parse_trapezoid_a(state)
+    parse_trapezoid(state, true, false)
 end
 
-function parse_trapezoid_b(io::IO)
-    parse_trapezoid(io, false, true)
+function parse_trapezoid_b(state)
+    parse_trapezoid(state, false, true)
 end
 
 ctrapezoid_vertices_0(w::UInt64, h::UInt64) = [
@@ -458,45 +461,73 @@ ctrapezoid_vertices_24(w::UInt64, h::UInt64) = [
 ctrapezoid_vertices_25(w::UInt64, ::UInt64) = [
     Point{2, Int64}(0, 0),      Point{2, Int64}(w, w)]
 
-const CTRAPEZOID_VERTICES_PER_TYPE = (
-    ctrapezoid_vertices_0,
-    ctrapezoid_vertices_1,
-    ctrapezoid_vertices_2,
-    ctrapezoid_vertices_3,
-    ctrapezoid_vertices_4,
-    ctrapezoid_vertices_5,
-    ctrapezoid_vertices_6,
-    ctrapezoid_vertices_7,
-    ctrapezoid_vertices_8,
-    ctrapezoid_vertices_9,
-    ctrapezoid_vertices_10,
-    ctrapezoid_vertices_11,
-    ctrapezoid_vertices_12,
-    ctrapezoid_vertices_13,
-    ctrapezoid_vertices_14,
-    ctrapezoid_vertices_15,
-    ctrapezoid_vertices_16,
-    ctrapezoid_vertices_17,
-    ctrapezoid_vertices_18,
-    ctrapezoid_vertices_19,
-    ctrapezoid_vertices_20,
-    ctrapezoid_vertices_21,
-    ctrapezoid_vertices_22,
-    ctrapezoid_vertices_23,
-    ctrapezoid_vertices_24,
-    ctrapezoid_vertices_25,
-)
+function ctrapezoid_vertices(w::UInt64, h::UInt64, ctrapezoid_type::UInt64)
+    if ctrapezoid_type == 0x00000000
+        return ctrapezoid_vertices_0(w, h)
+    elseif ctrapezoid_type == 0x00000001
+        return ctrapezoid_vertices_1(w, h)
+    elseif ctrapezoid_type == 0x00000002
+        return ctrapezoid_vertices_2(w, h)
+    elseif ctrapezoid_type == 0x00000003
+        return ctrapezoid_vertices_3(w, h)
+    elseif ctrapezoid_type == 0x00000004
+        return ctrapezoid_vertices_4(w, h)
+    elseif ctrapezoid_type == 0x00000005
+        return ctrapezoid_vertices_5(w, h)
+    elseif ctrapezoid_type == 0x00000006
+        return ctrapezoid_vertices_6(w, h)
+    elseif ctrapezoid_type == 0x00000007
+        return ctrapezoid_vertices_7(w, h)
+    elseif ctrapezoid_type == 0x00000008
+        return ctrapezoid_vertices_8(w, h)
+    elseif ctrapezoid_type == 0x00000009
+        return ctrapezoid_vertices_9(w, h)
+    elseif ctrapezoid_type == 0x0000000a
+        return ctrapezoid_vertices_10(w, h)
+    elseif ctrapezoid_type == 0x0000000b
+        return ctrapezoid_vertices_11(w, h)
+    elseif ctrapezoid_type == 0x0000000c
+        return ctrapezoid_vertices_12(w, h)
+    elseif ctrapezoid_type == 0x0000000d
+        return ctrapezoid_vertices_13(w, h)
+    elseif ctrapezoid_type == 0x0000000e
+        return ctrapezoid_vertices_14(w, h)
+    elseif ctrapezoid_type == 0x0000000f
+        return ctrapezoid_vertices_15(w, h)
+    elseif ctrapezoid_type == 0x00000010
+        return ctrapezoid_vertices_16(w, h)
+    elseif ctrapezoid_type == 0x00000011
+        return ctrapezoid_vertices_17(w, h)
+    elseif ctrapezoid_type == 0x00000012
+        return ctrapezoid_vertices_18(w, h)
+    elseif ctrapezoid_type == 0x00000013
+        return ctrapezoid_vertices_19(w, h)
+    elseif ctrapezoid_type == 0x00000014
+        return ctrapezoid_vertices_20(w, h)
+    elseif ctrapezoid_type == 0x00000015
+        return ctrapezoid_vertices_21(w, h)
+    elseif ctrapezoid_type == 0x00000016
+        return ctrapezoid_vertices_22(w, h)
+    elseif ctrapezoid_type == 0x00000017
+        return ctrapezoid_vertices_23(w, h)
+    elseif ctrapezoid_type == 0x00000018
+        return ctrapezoid_vertices_24(w, h)
+    elseif ctrapezoid_type == 0x00000019
+        return ctrapezoid_vertices_25(w, h)
+    end
+end
 
-function parse_ctrapezoid(io::IO)
-    info_byte = read(io, UInt8)
-    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
-    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
-    ctrapezoid_type = read_or_modal(io, rui, :ctrapezoidType, info_byte, 1)
-    width = read_or_modal(io, rui, :geometryW, info_byte, 2)
-    height = read_or_modal(io, rui, :geometryH, info_byte, 3)
-    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+function parse_ctrapezoid(state)
+    info_byte = read_byte(state)
+    layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
+    datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
+    ctrapezoid_type = read_or_modal(state, rui, Val(:ctrapezoidType), info_byte, 1)
+    width = read_or_modal(state, rui, Val(:geometryW), info_byte, 2)
+    height = read_or_modal(state, rui, Val(:geometryH), info_byte, 3)
+    x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
+    repetition = read_repetition(state, info_byte, 6)
 
+    vertices = ctrapezoid_vertices(width, height, ctrapezoid_type)
     vertices = CTRAPEZOID_VERTICES_PER_TYPE[ctrapezoid_type + 1](width, height)
     vertices .+= Point{2, Int64}(x, y)
     if ctrapezoid_type <= 0x0f
@@ -507,97 +538,141 @@ function parse_ctrapezoid(io::IO)
         ctrapezoid = HyperRectangle{2, Int64}(vertices...)
     end
     shape = Shape(ctrapezoid, layer_number, datatype_number, repetition)
-    push!(cell.shapes, shape)
+    push!(state.currentCell.shapes, shape)
 end
 
-function parse_circle(io::IO)
-    info_byte = read(io, UInt8)
-    layer_number = read_or_modal(io, rui, :layer, info_byte, 8)
-    datatype_number = read_or_modal(io, rui, :datatype, info_byte, 7)
-    radius = read_or_modal(io, rui, :circleRadius, info_byte, 3)
-    x, y = read_or_modal_xy(io, :geometryX, :geometryY, info_byte, 4)
-    repetition = read_or_nothing(io, read_repetition, :repetition, info_byte, 6)
+function parse_circle(state)
+    info_byte = read_byte(state)
+    layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
+    datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
+    radius = read_or_modal(state, rui, Val(:circleRadius), info_byte, 3)
+    x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
+    repetition = read_repetition(state, info_byte, 6)
 
     center = Point{2, Int64}(x, y)
     circle = HyperSphere{2, Int64}(center, radius)
     shape = Shape(circle, layer_number, datatype_number, repetition)
-    push!(cell.shapes, shape)
+    push!(state.currentCell.shapes, shape)
 end
 
-function parse_property(io::IO)
+function parse_property(state)
     # We ignore properties. The code here is only meant to figure out how many bytes to skip.
-    info_byte = read(io, UInt8)
+    info_byte = read_byte(state)
     propname_explicit = bit_is_nonzero(info_byte, 6)
     if propname_explicit
         propname_as_reference = bit_is_nonzero(info_byte, 7)
         if propname_as_reference
-            skip_integer(io)
+            skip_integer(state)
         else
-            skip_string(io)
+            skip_string(state)
         end
     end
     value_list_implicit = bit_is_nonzero(info_byte, 5)
     if !value_list_implicit
         number_of_values = info_byte >> 4
         if number_of_values == 0x0f
-            number_of_values = rui(io)
+            number_of_values = rui(state)
         end
         for _ in 1:number_of_values
-            skip_property_value(io)
+            skip_property_value(state)
         end
     end
 end
 
-function parse_cblock(io::IO)
-    comp_type = rui(io)
+function parse_cblock(state)
+    comp_type = rui(state)
     @assert comp_type == 0x00 "Unknown compression type encountered"
-    skip_integer(io) # uncomp_byte_count
-    comp_byte_count = rui(io)
+    uncomp_byte_count = rui(state)
+    comp_byte_count = rui(state)
     
-    cblock_buffer = IOBuffer(read(io, comp_byte_count))
-    io_decompress = DeflateDecompressorStream(cblock_buffer)
+    comp_bytes = read_bytes(state, comp_byte_count)
+    z = DeflateDecompressorStream(IOBuffer(comp_bytes))
+    buf_decompress = Vector{UInt8}(undef, uncomp_byte_count)
+    read!(z, buf_decompress)
+    close(z)
 
-    while !eof(io_decompress)
-        record_type = read(io_decompress, UInt8)
-        RECORD_PARSER_PER_TYPE[record_type + 1](io_decompress)
+    state_decomp = ParserState(state.oas, state.currentCell, buf_decompress, 1, state.mod)
+
+    while state_decomp.pos <= uncomp_byte_count
+        record_type = read_byte(state_decomp)
+        parse_record(record_type, state_decomp)
     end
-    close(io_decompress)
 end
 
-const RECORD_PARSER_PER_TYPE = (
-    skip_record, # PAD (0)
-    parse_start, # START (1)
-    skip_record, # END (2)
-    parse_cellname_impl, # CELLNAME (3)
-    parse_cellname_ref, # CELLNAME (4)
-    parse_textstring_impl, # TEXTSTRING (5)
-    parse_textstring_ref, # TEXTSTRING (6) 
-    parse_propname_impl, # PROPNAME (7)
-    parse_propname_ref, # PROPNAME (8)
-    parse_propstring_impl, # PROPSTRING (9)
-    parse_propstring_ref, # PROPSTRING (10)
-    parse_layername, # LAYERNAME (11)
-    parse_textlayername, # LAYERNAME (12)
-    parse_cell_ref, # CELL (13)
-    parse_cell_str, # CELL (14)
-    parse_xyabsolute, # XYABSOLUTE (15)
-    parse_xyrelative, # XYRELATIVE (16)
-    parse_placement, # PLACEMENT (17)
-    parse_placement_mag_angle, # PLACEMENT (18)
-    parse_text, # TEXT (19)
-    parse_rectangle, # RECTANGLE (20)
-    parse_polygon, # POLYGON (21)
-    parse_path, # PATH (22)
-    parse_trapezoid_ab, # TRAPEZOID (23)
-    parse_trapezoid_a, # TRAPEZOID (24)
-    parse_trapezoid_b, # TRAPEZOID (25)
-    parse_ctrapezoid, # CTRAPEZOID (26)
-    parse_circle, # CIRCLE (27)
-    parse_property, # PROPERTY (28)
-    skip_record, # PROPERTY (29)
-    skip_record, #parse_xname_impl, # XNAME (30)
-    skip_record, #parse_xname_ref, # XNAME (31)
-    skip_record, #parse_xelement, # XELEMENT (32)
-    skip_record, #parse_xgeometry, # XGEOMETRY (33)
-    parse_cblock # CBLOCK (34)
-)
+function parse_record(record_type::UInt8, state)
+    # Very common:
+    if record_type == 17 # PLACEMENT
+        parse_placement(state)
+    elseif record_type == 20 # RECTANGLE
+        parse_rectangle(state)
+    elseif record_type == 21 # POLYGON
+        parse_polygon(state)
+    elseif record_type == 4 # CELLNAME
+        parse_cellname_ref(state)
+    elseif record_type == 13 # CELL
+        parse_cell_ref(state)
+    # Common:
+    elseif record_type == 11 # LAYERNAME
+        parse_layername(state)
+    elseif record_type == 12 # LAYERNAME
+        parse_textlayername(state)
+    elseif record_type == 18 # PLACEMENT
+        parse_placement_mag_angle(state)
+    elseif record_type == 22 # PATH
+        parse_path(state)
+    elseif record_type == 34 # CBLOCK
+        parse_cblock(state)
+    # Not so common:
+    elseif record_type == 3 # CELLNAME
+        parse_cellname_impl(state)
+    elseif record_type == 5 # TEXTSTRING
+        parse_textstring_impl(state)
+    elseif record_type == 6 # TEXTSTRING
+        parse_textstring_ref(state)
+    elseif record_type == 7 # PROPNAME
+        parse_propname_impl(state)
+    elseif record_type == 8 # PROPNAME
+        parse_propname_ref(state)
+    elseif record_type == 9 # PROPSTRING
+        parse_propstring_impl(state)
+    elseif record_type == 10 # PROPSTRING
+        parse_propstring_ref(state)
+    elseif record_type == 14 # CELL
+        parse_cell_str(state)
+    elseif record_type == 15 # XYABSOLUTE
+        parse_xyabsolute(state)
+    elseif record_type == 16 # XYRELATIVE
+        parse_xyrelative(state)
+    elseif record_type == 19 # TEXT
+        parse_text(state)
+    elseif record_type == 23 # TRAPEZOID
+        parse_trapezoid(state, true, true)
+    elseif record_type == 24 # TRAPEZOID
+        parse_trapezoid(state, true, false)
+    elseif record_type == 25 # TRAPEZOID
+        parse_trapezoid(state, false, true)
+    elseif record_type == 26 # CTRAPEZOID
+        parse_ctrapezoid(state)
+    elseif record_type == 27 # CIRCLE
+        parse_circle(state)
+    elseif record_type == 28 # PROPERTY
+        parse_property(state)
+    elseif record_type == 29 # PROPERTY
+        skip_record(state)
+    # Very uncommon:
+    elseif record_type == 0 # PAD
+        skip_record(state)
+    elseif record_type == 1 # START
+        parse_start(state)
+    elseif record_type == 2 # END
+        skip_record(state)
+    elseif record_type == 30
+        @error "Not implemented"
+    elseif record_type == 31
+        @error "Not implemented"
+    elseif record_type == 32
+        @error "Not implemented"
+    elseif record_type == 33
+        @error "Not implemented"
+    end
+end

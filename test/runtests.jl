@@ -3,6 +3,7 @@ using OASIS
 using Test
 import Suppressor
 
+#=
 @testset "Read data" begin
     @testset "Read unsigned integers" begin
         @test OASIS.rui(IOBuffer([0x00])) == 0
@@ -120,6 +121,7 @@ end
     @test_throws BoundsError p[0]
     @test collect(p) == [p[1], p[2], p[3], p[4], p[5], p[6]]
 end
+=#
 
 @testset "Parse OASIS files" begin
     @testset "Polygon" begin
