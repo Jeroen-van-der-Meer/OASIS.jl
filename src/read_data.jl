@@ -125,6 +125,25 @@ function read_g_delta(state)
     end
 end
 
+"""
+    struct PointGridRange(start, nstepx, nstepy, stepx, stepy)
+
+A two-dimensional version of an ordinary range.
+
+# Example
+
+`PointGridRange((0, 0), 4, 3, (5, 1), (2, -2))` would kind of look like:
+```
+                 o
+            o      
+       o           o
+  o           o
+         o           o
+    o           o
+           o
+      o
+```
+"""
 struct PointGridRange <: AbstractRange{Point2i}
     start::Point2i
     nstepx::Int64

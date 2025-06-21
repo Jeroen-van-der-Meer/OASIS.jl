@@ -1,3 +1,19 @@
+"""
+    struct Shape(shape, layerNumber, datatypeNumber, repetition)
+
+Geometric shape (such as a polygon or rectangle) or text.
+
+# Properties
+
+- `shape`: The actual shape. If the shape is geometric, then `shape::GeometryBasics.GeometryPrimitive{2, Int64}`,
+  unless the shape is a path, in which case `shape::OASIS.Path` because `GeometryBasics` doesn't
+  have an appropriate object to encode paths. If the shape is text, then `shape::OASIS.Text`.
+- `layerNumber::UInt64`: The layer that your shape lives in. You can find the name of the layer
+  using the `references` field of your `Oasis` object.
+- `datatypeNumber::UInt64`: The 'datatype' that your shape lives in. To clarify, if your shape
+  lives in `(1/0)`, then `datatypeNumber = 0`.
+- `repetition`: Specifies whether the shape is repeated. If not, `repetition = nothing`.
+"""
 struct Shape{T}
     shape::T
     layerNumber::UInt64 # If T = Text, this refers to textlayerNumber
@@ -53,10 +69,10 @@ struct Text
 end
 
 """
-    Path(points::AbstractVector{<:Point}, width)
+    Path(points, width)
 
-A Path is a polyline with finite width, or equivalently, a `GeometryBasis.LineString` with
-specified width.
+A polyline with finite width, or equivalently, a `GeometryBasis.LineString` with specified
+width.
 """
 struct Path{Dim, T<:Real} <: AbstractGeometry{Dim, T}
     points::Vector{Point{Dim, T}}
@@ -71,12 +87,36 @@ struct CellPlacement
     repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
 
+"""
+    struct Cell(shapes, cells, nameNumber)
+
+# Arguments
+
+- `shapes::Vector{Shape}`: Lists the shapes, such as polygons and lines, that are contained in
+  the cell.
+- `cells::Vector{CellPlacement}`: Lists all other cells that are placed in this cell.
+- `nameNumber::UInt64`: The number corresponding to the name of the cell. You can find the
+  corresponding string in the `references` field of your `Oasis` object.
+"""
 struct Cell
     shapes::Vector{Shape} # Might have references to other cells within them?
     cells::Vector{CellPlacement} # Other cells
     nameNumber::UInt64
 end
 
+"""
+    struct Oasis(cells, metadata, references)
+
+Object containing all the data of your OASIS file.
+
+# Arguments
+
+- `cells::Vector{Cell}`: The actual contents.
+- `metadata::Metadata`: File version and length unit.
+- `references::References`: To save on storage space, in an OASIS file, names of cells, layers,
+  etc. are stored only once and are then referenced with a number. We mirror this behaviour in
+  `OASIS.jl`.
+"""
 Base.@kwdef struct Oasis
     cells::Vector{Cell} = []
     metadata::Metadata = Metadata()

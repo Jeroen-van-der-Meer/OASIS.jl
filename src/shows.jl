@@ -5,6 +5,22 @@ function Base.show(io::IO, oas::Oasis)
     show_cells(oas; depth = 2, flat = false, io)
 end
 
+"""
+    show_cells(oas; kw...)
+
+Obtain an overview of the cells in your OASIS objects.
+
+# Arguments
+
+- `oas::Oasis`: Your OASIS object, loaded with `oasisread`.
+
+# Keyword Arguments
+
+- `depth = 100`: Specify until what depth you'd like to the cell hierarchy to be displayed.
+- `flat = false`: If set to `true`, rather than displaying a hierarchy, `show_cells` simply
+  lists the names of all cells that can be found in `oas`. If set to `true`, the keyword
+  argument `depth` is ignored.
+"""
 function show_cells(oas::Oasis; depth = 100, flat = false, io = stdout)
     if flat
         for cell in oas.cells
