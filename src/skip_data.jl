@@ -27,12 +27,14 @@ skip_real(io::IO, format::UInt8) = REAL_SKIPPER_PER_FORMAT[format + 1](io)
 
 skip_real(io::IO) = skip_real(io, read(io, UInt8))
 
-skip_string(io::IO) = skip(io, read(io, UInt8))
+skip_string(io::IO) = skip(io, rui(io))
 
 function skip_property_value(io::IO)
     type = read(io, UInt8)
     if type <= 0x07
         skip_real(io, type)
+    elseif 0x0a <= type <= 0x0c
+        skip_string(io)
     else
         skip_integer(io)
     end

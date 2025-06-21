@@ -51,7 +51,7 @@ function read_real(io::IO)
 end
 
 function read_string(io::IO)
-    length = read(io, UInt8)
+    length = rui(io)
     s = read(io, length)
     return String(s)
 end
@@ -146,7 +146,7 @@ collect_repetitions_x(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum([Po
 collect_repetitions_y(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([Point{2, Int64}(0, rui(io)) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
 collect_repetitions_g(io, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([read_g_delta(io) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
 
-read_repetition_type_0(io::IO) = @error "Not implemented" # To be dealt with when we have modal vars
+read_repetition_type_0(::IO) = modals.repetition
 read_repetition_type_1(io::IO) = PointGridRange((0, 0), rui(io) + 2, rui(io) + 2, (rui(io), 0), (0, rui(io)))
 read_repetition_type_2(io::IO) = PointGridRange((0, 0), rui(io) + 2, 1, (rui(io), 0), (1, 1))
 read_repetition_type_3(io::IO) = PointGridRange((0, 0), 1, rui(io) + 2, (1, 1), (0, rui(io)))
@@ -179,11 +179,11 @@ function read_repetition(io::IO)
     return REPETITION_READER_PER_TYPE[type + 1](io)
 end
 
-read_1_delta_list_horizontal_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2) for i in 0:(vc - 1)]
-read_1_delta_list_vertical_first(io::IO, vc::UInt8) = [read_1_delta(io, i % 2) for i in 1:vc]
-read_2_delta_list(io::IO, vc::UInt8) = [read_2_delta(io) for _ in 1:vc]
-read_3_delta_list(io::IO, vc::UInt8) = [read_3_delta(io) for _ in 1:vc]
-read_g_delta_list(io::IO, vc::UInt8) = [read_g_delta(io) for _ in 1:vc]
+read_1_delta_list_horizontal_first(io::IO, vc::UInt64) = [read_1_delta(io, i % 2) for i in 0:(vc - 1)]
+read_1_delta_list_vertical_first(io::IO, vc::UInt64) = [read_1_delta(io, i % 2) for i in 1:vc]
+read_2_delta_list(io::IO, vc::UInt64) = [read_2_delta(io) for _ in 1:vc]
+read_3_delta_list(io::IO, vc::UInt64) = [read_3_delta(io) for _ in 1:vc]
+read_g_delta_list(io::IO, vc::UInt64) = [read_g_delta(io) for _ in 1:vc]
 
 const POINT_LIST_READER_PER_TYPE = (
     read_1_delta_list_horizontal_first,
@@ -196,7 +196,7 @@ const POINT_LIST_READER_PER_TYPE = (
 
 function read_point_list(io::IO)
     type = read(io, UInt8)
-    vertex_count = read(io, UInt8)
+    vertex_count = rui(io)
     return POINT_LIST_READER_PER_TYPE[type + 1](io, vertex_count)
 end
 
@@ -206,6 +206,8 @@ function read_property_value(io::IO)
         return read_real(io, type)
     elseif type == 0x09
         return read_signed_integer(io)
+    elseif 0x0a <= type <= 0x0c
+        return read_string(io)
     else
         return rui(io)
     end
