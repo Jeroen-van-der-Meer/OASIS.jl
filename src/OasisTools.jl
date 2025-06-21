@@ -1,4 +1,4 @@
-module OASIS
+module OasisTools
 
 using CodecZlib
 using GeometryBasics
@@ -65,4 +65,4 @@ function oasisread(filename::AbstractString)
     return state.oas
 end
 
-end # module OASIS
+end # module OasisTools

@@ -1,4 +1,4 @@
-name = "OASIS"
+name = "OasisTools"
 uuid = "06265d1e-e248-4aa0-9c0a-73a2b8992637"
 authors = ["Jeroen van der Meer <meer@vivaldi.net>"]
 version = "0.1.0"
@@ -7,3 +7,9 @@ version = "0.1.0"
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 Mmap = "a63ad114-7e13-5084-954f-fe012c677804"
+
+[compat]
+CodecZlib = "0.7.0"
+GeometryBasics = "0.5.0"
+Mmap = "1.6"
+julia = "1.6"

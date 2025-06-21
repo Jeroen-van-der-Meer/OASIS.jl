@@ -6,8 +6,9 @@ Geometric shape (such as a polygon or rectangle) or text.
 # Properties
 
 - `shape`: The actual shape. If the shape is geometric, then `shape::GeometryBasics.GeometryPrimitive{2, Int64}`,
-  unless the shape is a path, in which case `shape::OASIS.Path` because `GeometryBasics` doesn't
-  have an appropriate object to encode paths. If the shape is text, then `shape::OASIS.Text`.
+  unless the shape is a path, in which case `shape::OasisTools.Path` because `GeometryBasics`
+  doesn't have an appropriate object to encode paths. If the shape is text, then
+  `shape::OasisTools.Text`.
 - `layerNumber::UInt64`: The layer that your shape lives in. You can find the name of the layer
   using the `references` field of your `Oasis` object.
 - `datatypeNumber::UInt64`: The 'datatype' that your shape lives in. To clarify, if your shape
@@ -115,7 +116,7 @@ Object containing all the data of your OASIS file.
 - `metadata::Metadata`: File version and length unit.
 - `references::References`: To save on storage space, in an OASIS file, names of cells, layers,
   etc. are stored only once and are then referenced with a number. We mirror this behaviour in
-  `OASIS.jl`.
+  `OasisTools.jl`.
 """
 Base.@kwdef struct Oasis
     cells::Vector{Cell} = []
