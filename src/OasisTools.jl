@@ -50,6 +50,7 @@ TOP
   any.
 """
 function oasisread(filename::AbstractString)
+    global x::Int = 0
     buf = Mmap.mmap(filename)
     state = ParserState(buf)
 
