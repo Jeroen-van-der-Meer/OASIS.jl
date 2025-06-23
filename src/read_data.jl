@@ -27,7 +27,7 @@ read_positive_reciprocal(state) = 1 / rui(state)
 read_negative_reciprocal(state) = -1 / rui(state)
 read_positive_ratio(state) = read_positive_whole_number(state) / read_positive_whole_number(state)
 read_negative_ratio(state) = read_negative_whole_number(state) / read_positive_whole_number(state)
-read_four_byte_float(state) = Float64(read(stateBuffer(read_bytes(state, 4)), Float32))
+read_four_byte_float(state) = Float64(read(IOBuffer(read_bytes(state, 4)), Float32))
 read_eight_byte_float(state) = read(IOBuffer(read_bytes(state, 8)), Float64)
 
 function read_real(state, format::UInt8)
@@ -175,9 +175,35 @@ function Base.iterate(r::PointGridRange, i::Integer = zero(length(r)))
     r[i], i
 end
 
-collect_repetitions_x(state, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum([Point{2, Int64}(rui(state), 0) for _ in 1:(nrep - 1)]), Point{2, Int64}(0, 0))
-collect_repetitions_y(state, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([Point{2, Int64}(0, rui(state)) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
-collect_repetitions_g(state, nrep; grid::Int64 = 1) = pushfirst!(grid .* cumsum(pushfirst!([read_g_delta(state) for _ in 1:(nrep - 1)])), Point{2, Int64}(0, 0))
+function collect_repetitions_x(state, nrep; grid::Int64 = 1)
+    l = Vector{Point{2, Int64}}(undef, nrep)
+    l[1] = Point{2, Int64}(0, 0)
+    @inbounds for i = 2:nrep
+        l[i] = Point{2, Int64}(rui(state), 0) + l[i - 1]
+    end
+    l .*= grid
+    return l
+end
+
+function collect_repetitions_y(state, nrep; grid::Int64 = 1)
+    l = Vector{Point{2, Int64}}(undef, nrep)
+    l[1] = Point{2, Int64}(0, 0)
+    @inbounds for i = 2:nrep
+        l[i] = Point{2, Int64}(0, rui(state)) + l[i - 1]
+    end
+    l .*= grid
+    return l
+end
+
+function collect_repetitions_g(state, nrep; grid::Int64 = 1)
+    l = Vector{Point{2, Int64}}(undef, nrep)
+    l[1] = Point{2, Int64}(0, 0)
+    @inbounds for i = 2:nrep
+        l[i] = read_g_delta(state) + l[i - 1]
+    end
+    l .*= grid
+    return l
+end
 
 read_repetition_type_0(state) = state.mod.repetition
 read_repetition_type_1(state) = PointGridRange((0, 0), rui(state) + 2, rui(state) + 2, (rui(state), 0), (0, rui(state)))
@@ -222,14 +248,55 @@ function read_repetition(state)
     end
 end
 
+function read_1_delta_list_horizontal_first(state, vc::UInt64)
+    l = Vector{Point{2, Int64}}(undef, vc + 1)
+    l[1] = Point{2, Int64}(0, 0)
+    for i in 1:vc
+        l[i + 1] = read_1_delta(state, (i + 1) % 2)
+    end
+    return l
+end
 
-read_1_delta_list_horizontal_first(state, vc::UInt64) = [read_1_delta(state, i % 2) for i in 0:(vc - 1)]
-read_1_delta_list_vertical_first(state, vc::UInt64) = [read_1_delta(state, i % 2) for i in 1:vc]
-read_2_delta_list(state, vc::UInt64) = [read_2_delta(state) for _ in 1:vc]
-read_3_delta_list(state, vc::UInt64) = [read_3_delta(state) for _ in 1:vc]
-read_g_delta_list(state, vc::UInt64) = [read_g_delta(state) for _ in 1:vc]
+function read_1_delta_list_vertical_first(state, vc::UInt64)
+    l = Vector{Point{2, Int64}}(undef, vc + 1)
+    l[1] = Point{2, Int64}(0, 0)
+    for i in 1:vc
+        l[i + 1] = read_1_delta(state, i % 2)
+    end
+    return l
+end
+
+function read_2_delta_list(state, vc::UInt64)
+    l = Vector{Point{2, Int64}}(undef, vc + 1)
+    l[1] = Point{2, Int64}(0, 0)
+    for i in 1:vc
+        l[i + 1] = read_2_delta(state)
+    end
+    return l
+end
+
+function read_3_delta_list(state, vc::UInt64)
+    l = Vector{Point{2, Int64}}(undef, vc + 1)
+    l[1] = Point{2, Int64}(0, 0)
+    for i in 1:vc
+        l[i + 1] = read_3_delta(state)
+    end
+    return l
+end
+
+function read_g_delta_list(state, vc::UInt64)
+    l = Vector{Point{2, Int64}}(undef, vc + 1)
+    l[1] = Point{2, Int64}(0, 0)
+    for i in 1:vc
+        l[i + 1] = read_g_delta(state)
+    end
+    return l
+end
 
 function read_point_list(state)
+    # Warning: read_point_list artificially adds a Point2i(0, 0) to the beginning of the list.
+    # In the OASIS specification, this first point is implied because an offset is provided
+    # alongside the point list.
     type = read_byte(state)
     vertex_count = rui(state)
     # Ordering is changed based on what appears to be used most often in practice.

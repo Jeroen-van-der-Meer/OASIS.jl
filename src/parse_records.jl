@@ -251,7 +251,6 @@ function parse_polygon(state)
     x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
     repetition = read_repetition(state, info_byte, 6)
 
-    pushfirst!(point_list, Point{2, Int64}(0, 0))
     cumsum!(point_list, point_list)
     point_list .+= Point{2, Int64}(x, y)
     polygon = Polygon(point_list)
@@ -306,22 +305,21 @@ function parse_path(state)
     # list will properly snap within the specified grid, and as such rounding errors may occur.
     # That said, I cannot imagine this setting is used often in practice.
     if !iszero(start_extension)
-        first_delta = first(point_list)
+        first_delta = point_list[2]
         first_delta_normalized = first_delta ./ sqrt(first_delta[1]^2 + first_delta[2]^2)
         adjustment_for_start = first_delta_normalized * start_extension
         adjustment_for_start_rounded = round.(Int64, adjustment_for_start)
-        point_list[1] += adjustment_for_start_rounded
+        point_list[2] += adjustment_for_start_rounded
         x -= adjustment_for_start_rounded[1]
         y -= adjustment_for_start_rounded[2]
     end
     if !iszero(end_extension)
-        last_delta = last(point_list)
+        last_delta = point_list[end]
         last_delta_normalized = last_delta ./ sqrt(last_delta[1]^2 + last_delta[2]^2)
         adjustment_for_end = last_delta_normalized * end_extension
         adjustment_for_end_rounded = round.(Int64, adjustment_for_end)
         point_list[end] += adjustment_for_end_rounded
     end
-    pushfirst!(point_list, Point{2, Int64}(0, 0))
     cumsum!(point_list, point_list)
     point_list .+= Point{2, Int64}(x, y)
     path = Path(point_list, 2 * signed(halfwidth))
