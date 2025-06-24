@@ -5,10 +5,8 @@ Toolkit for working with Open Artwork System Interchange Standard (OASIS) files.
 ## Installation
 
 ```
-pkg> dev https://github.com/Jeroen-van-der-Meer/OasisTools.jl.git
+pkg> add OasisTools
 ```
-
-Note that this package is not yet in the Julia repository.
 
 ## Getting started
 
