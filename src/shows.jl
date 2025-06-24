@@ -23,7 +23,7 @@ function show_cells(oas::Oasis; maxdepth = 100, flat = false, io = stdout)
             println(io, find_reference(cell.nameNumber, oas.references.cellNames))
         end
     else
-        _show_hierarchy(oas; maxdepth = maxdepth, io)
+        _show_hierarchy(oas; maxdepth = maxdepth, io = io)
     end
 end
 
@@ -34,7 +34,7 @@ function show_cells(cell::Cell; maxdepth = 100, flat = false, io = stdout)
             println(io, find_reference(cell.nameNumber, oas.references.cellNames))
         end
     else
-        _show_hierarchy(oas; maxdepth = maxdepth, root = cell.nameNumber, io)
+        _show_hierarchy(oas; maxdepth = maxdepth, root = cell.nameNumber, io = io)
     end
 end
 
@@ -48,14 +48,14 @@ function Base.show(io::IO, oas::Oasis)
     print(io,
         "OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ",
         "with the following cells: \n")
-    show_cells(oas; maxdepth = 2, flat = false, io)
+    show_cells(oas; maxdepth = 2, flat = false, io = io)
 end
 
 #=
 function Base.show(io::IO, cell::Cell)
     print(io, "Cell $(cell.nameNumber) with the following contents: \n")
-    show_shapes(cell; io)
-    show_cells(cell; maxdepth = 2, flat = false, io)
+    show_shapes(cell; io = io)
+    show_cells(cell; maxdepth = 2, flat = false, io = io)
 end
 =#
 
@@ -129,8 +129,10 @@ function _show_hierarchy(
         child_is_last = i == nunique_children
         _show_hierarchy(
             oas;
-            cell_hierarchy,
-            maxdepth, io, count,
+            cell_hierarchy = cell_hierarchy,
+            maxdepth = maxdepth,
+            io = io,
+            count = count,
             root = child,
             current_depth = current_depth + 1,
             prefix = new_prefix,
