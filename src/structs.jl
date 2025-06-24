@@ -124,6 +124,12 @@ Base.@kwdef struct Oasis
     references::References = References()
 end
 
+function Base.getindex(oas::Oasis, cell_name::String)
+    cell_number = find_reference(cell_name, oas.references.cellNames)
+    cell_index = findfirst(c -> c.nameNumber == cell_number, oas.cells)
+    return oas.cells[cell_index]
+end
+
 mutable struct ParserState
     oas::Oasis # Contents of the OASIS file.
     currentCell::Cell # Current cell we're looking at.

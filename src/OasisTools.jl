@@ -2,14 +2,16 @@ module OasisTools
 
 using CodecZlib
 using GeometryBasics
-using Mmap
+import Mmap: mmap
 
 export Cell
+export CellPlacement
 export Oasis
 export oasisread
 export PointGridRange
 export Shape
 export show_cells
+export show_shapes
 
 include("read_data.jl")
 include("skip_data.jl")
@@ -50,7 +52,7 @@ TOP
   any.
 """
 function oasisread(filename::AbstractString)
-    buf = Mmap.mmap(filename)
+    buf = mmap(filename)
     state = ParserState(buf)
 
     header = read_bytes(state, 13)

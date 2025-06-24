@@ -1,9 +1,4 @@
-function Base.show(io::IO, oas::Oasis)
-    print(io,
-        "OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ",
-        "with the following cells: \n")
-    show_cells(oas; depth = 2, flat = false, io)
-end
+# Public display functions
 
 """
     show_cells(oas; kw...)
@@ -16,22 +11,86 @@ Obtain an overview of the cells in your OASIS objects.
 
 # Keyword Arguments
 
-- `depth = 100`: Specify until what depth you'd like to the cell hierarchy to be displayed.
+- `maxdepth = 100`: Specify until what maxdepth you'd like to the cell hierarchy to be
+  displayed.
 - `flat = false`: If set to `true`, rather than displaying a hierarchy, `show_cells` simply
   lists the names of all cells that can be found in `oas`. If set to `true`, the keyword
-  argument `depth` is ignored.
+  argument `maxdepth` is ignored.
 """
-function show_cells(oas::Oasis; depth = 100, flat = false, io = stdout)
+function show_cells(oas::Oasis; maxdepth = 100, flat = false, io = stdout)
     if flat
         for cell in oas.cells
             println(io, find_reference(cell.nameNumber, oas.references.cellNames))
         end
     else
-        show_hierarchy(oas; maxdepth = depth, io)
+        _show_hierarchy(oas; maxdepth = maxdepth, io)
     end
 end
 
-function show_hierarchy(
+# Same as show_cells(oas) but starting from a specified cell
+function show_cells(cell::Cell; maxdepth = 100, flat = false, io = stdout)
+    if flat
+        for cell in oas.cells
+            println(io, find_reference(cell.nameNumber, oas.references.cellNames))
+        end
+    else
+        _show_hierarchy(oas; maxdepth = maxdepth, root = cell.nameNumber, io)
+    end
+end
+
+function show_shapes(oas::Oasis; cell::AbstractString, maxdepth = 1, flat = false)
+    @error "Not implemented"
+end
+
+# Custom shows
+
+function Base.show(io::IO, oas::Oasis)
+    print(io,
+        "OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ",
+        "with the following cells: \n")
+    show_cells(oas; maxdepth = 2, flat = false, io)
+end
+
+#=
+function Base.show(io::IO, cell::Cell)
+    print(io, "Cell $(cell.nameNumber) with the following contents: \n")
+    show_shapes(cell; io)
+    show_cells(cell; maxdepth = 2, flat = false, io)
+end
+=#
+
+function Base.show(io::IO, placement::CellPlacement)
+    print(io, "Placement of cell $(placement.nameNumber) at ($(placement.location[1]), $(placement.location[2]))")
+    repetition = !isnothing(placement.repetition)
+    if repetition
+        nrep = length(placement.repetition)
+        print(io, " ($nrep×)")
+    end
+end
+
+function Base.show(io::IO, shape::Shape{Polygon{2, Int64}})
+    location = sum(shape.shape.exterior) .÷ length(shape.shape.exterior)
+    _show_shape(io, shape, "Polygon", location)
+end
+
+function Base.show(io::IO, shape::Shape{HyperRectangle{2, Int64}})
+    location = shape.shape.origin + shape.shape.widths .÷ 2
+    _show_shape(io, shape, "Rectangle", location)
+end
+
+function Base.show(io::IO, shape::Shape{Circle{Int64}})
+    location = shape.shape.center
+    _show_shape(io, shape, "Circle", location)
+end
+
+function Base.show(io::IO, shape::Shape{Path{2, Int64}})
+    location = sum(shape.shape.points) .÷ length(shape.shape.points)
+    _show_shape(io, shape, "Path", location)
+end
+
+# Internal functions
+
+function _show_hierarchy(
     oas::Oasis;
     cell_hierarchy = CellHierarchy(oas),
     maxdepth = 100, io = stdout, count = 1,
@@ -68,7 +127,7 @@ function show_hierarchy(
     nunique_children = length(count_map)
     for (i, (child, count)) in enumerate(pairs(count_map))
         child_is_last = i == nunique_children
-        show_hierarchy(
+        _show_hierarchy(
             oas;
             cell_hierarchy,
             maxdepth, io, count,
@@ -80,6 +139,11 @@ function show_hierarchy(
     end
 end
 
-function show_shapes(oas::Oasis; cell::AbstractString, depth = 1, flat = false)
-    @error "Not implemented"
+function _show_shape(io::IO, shape::Shape, name, location)
+    print(io, "$name in layer ($(shape.layerNumber)/$(shape.datatypeNumber)) at ($(location[1]), $(location[2]))")
+    repetition = !isnothing(shape.repetition)
+    if repetition
+        nrep = length(shape.repetition)
+        print(io, " ($nrep×)")
+    end
 end
