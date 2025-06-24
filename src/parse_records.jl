@@ -351,17 +351,17 @@ function parse_trapezoid(state, delta_a_explicit::Bool, delta_b_explicit::Bool)
 
     if bit_is_nonzero(info_byte, 1) # Vertical orientation
         vertices = [
-            Point{2, Int64}(0, 0),
-            Point{2, Int64}(width, delta_a),
-            Point{2, Int64}(width, height - delta_b),
-            Point{2, Int64}(0, h)
+            Point{2, Int64}(0, max(delta_a, 0)),
+            Point{2, Int64}(width, max(-delta_a, 0)),
+            Point{2, Int64}(width, height + min(-delta_b, 0)),
+            Point{2, Int64}(0, height + min(delta_b, 0))
         ]
     else # Horizontal orientation
         vertices = [
-            Point{2, Int64}(0, h),
-            Point{2, Int64}(delta_a, 0),
-            Point{2, Int64}(width - delta_b, 0),
-            Point{2, Int64}(width, height)
+            Point{2, Int64}(max(delta_a, 0), height),
+            Point{2, Int64}(max(-delta_a, 0), 0),
+            Point{2, Int64}(width + min(-delta_b, 0), 0),
+            Point{2, Int64}(width + min(delta_b, 0), height)
         ]
     end
     vertices .+= Point{2, Int64}(x, y)
@@ -526,7 +526,6 @@ function parse_ctrapezoid(state)
     repetition = read_repetition(state, info_byte, 6)
 
     vertices = ctrapezoid_vertices(width, height, ctrapezoid_type)
-    vertices = CTRAPEZOID_VERTICES_PER_TYPE[ctrapezoid_type + 1](width, height)
     vertices .+= Point{2, Int64}(x, y)
     if ctrapezoid_type <= 0x0f
         ctrapezoid = Polygon(vertices)

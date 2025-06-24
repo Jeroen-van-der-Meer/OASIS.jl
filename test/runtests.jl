@@ -295,4 +295,50 @@ TOP
         @test placement2.rotation == 180
         @test placement2.repetition == Point{2, Int64}[(0, 0), (2, 0), (4, 0)]
     end
+    @testset "Trapezoids" begin
+        # Contains: Trapezoids and ctrapezoids. Made with LayoutEditor because klayout doesn't
+        # use TRAPEZOID and CTRAPEZOID records.
+        # Some interesting quirks specific to LayoutEditor's way of saving files:
+        #  - It does not seem to use references for strings (at least not when used only once).
+        #  - It contains the following stingy message, which they actually insert into the layout:
+        #    "Generated with the LayoutEditor (This message will NOT be added by any commercial
+        #     version of the LayoutEditor.)"
+        #    Surely they know you can just manually delete the text record from the file...?
+        filename = "trapezoids.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath)
+        cell = oas["noname"] # This is what LayoutEditor calls your cell if you don't name it.
+        @test length(cell.shapes) == 7 # Six polygons and the free-version disclaimer.
+        @test cell.shapes[1] isa Shape{OasisTools.Text}
+        polygon1 = cell.shapes[2]
+        @test polygon1.shape.exterior == [
+            Point{2, Int64}(28810, -17702), Point{2, Int64}(28813, -17703),
+            Point{2, Int64}(28813, -17698), Point{2, Int64}(28810, -17696)
+        ]
+        polygon2 = cell.shapes[3]
+        @test polygon2.shape.exterior == [
+            Point{2, Int64}(28796, -17701), Point{2, Int64}(28796, -17705),
+            Point{2, Int64}(28800, -17705), Point{2, Int64}(28803, -17701)
+        ]
+        polygon3 = cell.shapes[4]
+        @test polygon3.shape.exterior == [
+            Point{2, Int64}(28805, -17705), Point{2, Int64}(28807, -17703),
+            Point{2, Int64}(28807, -17698), Point{2, Int64}(28805, -17700)
+        ]
+        polygon4 = cell.shapes[5]
+        @test polygon4.shape.exterior == [
+            Point{2, Int64}(28800, -17707), Point{2, Int64}(28799, -17710),
+            Point{2, Int64}(28806, -17710), Point{2, Int64}(28805, -17707)
+        ]
+        polygon5 = cell.shapes[6]
+        @test polygon5.shape.exterior == [
+            Point{2, Int64}(28809, -17704), Point{2, Int64}(28810, -17706),
+            Point{2, Int64}(28814, -17706), Point{2, Int64}(28813, -17704)
+        ]
+        polygon6 = cell.shapes[7]
+        @test polygon6.shape.exterior == [
+            Point{2, Int64}(28794, -17696), Point{2, Int64}(28797, -17699),
+            Point{2, Int64}(28801, -17699), Point{2, Int64}(28802, -17696)
+        ]
+    end
 end

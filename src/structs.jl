@@ -31,11 +31,13 @@ end
 
 function find_reference(number::UInt64, references::AbstractVector{NumericReference})
     index = findfirst(r -> r.number == number, references)
+    isnothing(index) && return index
     return references[index].name
 end
 
 function find_reference(name::String, references::AbstractVector{NumericReference})
     index = findfirst(r -> r.name == name, references)
+    isnothing(index) && return index
     return references[index].number
 end
 

@@ -64,9 +64,10 @@ end
 # placed. For consistency, we wish to always log a reference number. However, there is no
 # guarantee that such reference exists, so we'll have to manually create it.
 function cellname_to_cellname_number(state, cellname::String)
-    cellname_number = find_reference(number, state.oas.references.cellNames)
+    cellname_number = find_reference(cellname, state.oas.references.cellNames)
     if isnothing(cellname_number)
         cellname_number = rand(UInt64)
         push!(state.oas.references.cellNames, NumericReference(cellname, cellname_number))
     end
+    return cellname_number
 end
