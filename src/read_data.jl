@@ -144,12 +144,12 @@ A two-dimensional version of an ordinary range.
       o
 ```
 """
-struct PointGridRange <: AbstractRange{Point2i}
-    start::Point2i
+struct PointGridRange <: AbstractRange{Point{2, Int64}}
+    start::Point{2, Int64}
     nstepx::Int64
     nstepy::Int64
-    stepx::Point2i
-    stepy::Point2i
+    stepx::Point{2, Int64}
+    stepy::Point{2, Int64}
 end
 Base.first(r::PointGridRange) = r.start
 Base.step(r::PointGridRange) = (r.stepx, r.stepy)
@@ -294,7 +294,7 @@ function read_g_delta_list(state, vc::UInt64)
 end
 
 function read_point_list(state)
-    # Warning: read_point_list artificially adds a Point2i(0, 0) to the beginning of the list.
+    # Warning: read_point_list artificially adds a Point{2, Int64}(0, 0) to the beginning of the list.
     # In the OASIS specification, this first point is implied because an offset is provided
     # alongside the point list.
     type = read_byte(state)
