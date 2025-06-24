@@ -38,42 +38,42 @@ import Suppressor
         @test OasisTools.read_string(ParserState([0x00, 0xff])) == ""
     end
     @testset "Read 2-deltas" begin
-        @test OasisTools.read_2_delta(ParserState([0x98, 0x2a])) == Point2i(1350, 0)
-        @test OasisTools.read_2_delta(ParserState([0x9b, 0x2a])) == Point2i(0, -1350)
+        @test OasisTools.read_2_delta(ParserState([0x98, 0x2a])) == Point{2, Int64}(1350, 0)
+        @test OasisTools.read_2_delta(ParserState([0x9b, 0x2a])) == Point{2, Int64}(0, -1350)
     end
     @testset "Read 3-deltas" begin
-        @test OasisTools.read_3_delta(ParserState([0xcd, 0x01])) == Point2i(-25, 25)
-        @test OasisTools.read_3_delta(ParserState([0xd7, 0x07])) == Point2i(122, -122)
+        @test OasisTools.read_3_delta(ParserState([0xcd, 0x01])) == Point{2, Int64}(-25, 25)
+        @test OasisTools.read_3_delta(ParserState([0xd7, 0x07])) == Point{2, Int64}(122, -122)
     end
     @testset "Read g-deltas" begin
-        @test OasisTools.read_g_delta(ParserState([0xe9, 0x03, 0x7a])) == Point2i(122, 61)
-        @test OasisTools.read_g_delta(ParserState([0xec, 0x05])) == Point2i(-46, -46)
-        @test OasisTools.read_g_delta(ParserState([0xbb, 0x01, 0xb7, 0x0f])) == Point2i(-46, -987)
+        @test OasisTools.read_g_delta(ParserState([0xe9, 0x03, 0x7a])) == Point{2, Int64}(122, 61)
+        @test OasisTools.read_g_delta(ParserState([0xec, 0x05])) == Point{2, Int64}(-46, -46)
+        @test OasisTools.read_g_delta(ParserState([0xbb, 0x01, 0xb7, 0x0f])) == Point{2, Int64}(-46, -987)
     end
     @testset "Read point lists" begin
         @test OasisTools.read_point_list(ParserState([0x00, 0x04, 0x0c, 0x08, 0x11, 0x05])) ==
-            Point2i[(0, 0), (6, 0), (0, 4), (-8, 0), (0, -2)]
+            Point{2, Int64}[(0, 0), (6, 0), (0, 4), (-8, 0), (0, -2)]
         @test OasisTools.read_point_list(ParserState([0x01, 0x04, 0x11, 0x04, 0x04, 0x04])) ==
-            Point2i[(0, 0), (0, -8), (2, 0), (0, 2), (2, 0)]
+            Point{2, Int64}[(0, 0), (0, -8), (2, 0), (0, 2), (2, 0)]
         @test OasisTools.read_point_list(ParserState([0x02, 0x05, 0x20, 0x19, 0x12, 0x0b, 0x12])) ==
-            Point2i[(0, 0), (8, 0), (0, 6), (-4, 0), (0, -2), (-4, 0)]
+            Point{2, Int64}[(0, 0), (8, 0), (0, 6), (-4, 0), (0, -2), (-4, 0)]
         @test OasisTools.read_point_list(ParserState([0x03, 0x04, 0x15, 0x21, 0x30, 0x13])) ==
-            Point2i[(0, 0), (-2, 2), (0, 4), (6, 0), (0, -2)]
+            Point{2, Int64}[(0, 0), (-2, 2), (0, 4), (6, 0), (0, -2)]
         @test OasisTools.read_point_list(ParserState([0x04, 0x02, 0x44, 0x09, 0x0d])) ==
-            Point2i[(0, 0), (-4, 0), (2, -6)]
+            Point{2, Int64}[(0, 0), (-4, 0), (2, -6)]
         @test OasisTools.read_point_list(ParserState([
             0x05, 0x09, 0x01, 0x03, 0x29,
             0x00, 0x01, 0x04, 0x01, 0x03,
             0x01, 0x03, 0x2b, 0x04, 0x2b,
             0x00, 0x01, 0x03, 0x01, 0x03
-        ])) == Point2i[
+        ])) == Point{2, Int64}[
             (0, 0), (0, -1), (10, -1), (10, 1), (10, 0),
             (10, -1), (0, 1), (-10, 1), (-10, 0), (-10, -1)
         ]
     end
     @testset "Read repetitions" begin
         @test OasisTools.read_repetition(ParserState([0x00])) == 
-            Point2i[] # Init value of modal variable
+            Point{2, Int64}[] # Init value of modal variable
         @test OasisTools.read_repetition(ParserState([0x01, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
             PointGridRange((0, 0), 130, 129, (1, 0), (0, 1))
         @test OasisTools.read_repetition(ParserState([0x02, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
@@ -81,21 +81,21 @@ import Suppressor
         @test OasisTools.read_repetition(ParserState([0x03, 0x80, 0x01, 0x7f, 0x01, 0x01])) ==
             PointGridRange((0, 0), 1, 130, (1, 1), (0, 127))
         @test OasisTools.read_repetition(ParserState([0x04, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
-            Point2i[(0, 0), (127, 0), (128, 0), (255, 0)]
+            Point{2, Int64}[(0, 0), (127, 0), (128, 0), (255, 0)]
         @test OasisTools.read_repetition(ParserState([0x05, 0x02, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
-            Point2i[(0, 0), (254, 0), (256, 0), (510, 0)]
+            Point{2, Int64}[(0, 0), (254, 0), (256, 0), (510, 0)]
         @test OasisTools.read_repetition(ParserState([0x06, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
-            Point2i[(0, 0), (0, 127), (0, 128), (0, 255)]
+            Point{2, Int64}[(0, 0), (0, 127), (0, 128), (0, 255)]
         @test OasisTools.read_repetition(ParserState([0x07, 0x02, 0x02, 0x7f, 0x01, 0x7f, 0x01])) ==
-            Point2i[(0, 0), (0, 254), (0, 256), (0, 510)]
+            Point{2, Int64}[(0, 0), (0, 254), (0, 256), (0, 510)]
         @test OasisTools.read_repetition(ParserState([0x08, 0x80, 0x01, 0x7f, 0xe9, 0x03, 0x7a, 0xa0, 0x01])) ==
             PointGridRange((0, 0), 130, 129, (122, 61), (10, 0))
         @test OasisTools.read_repetition(ParserState([0x09, 0x01, 0xe9, 0x03, 0x7a])) ==
             PointGridRange((0, 0), 3, 1, (122, 61), (1, 1))
         @test OasisTools.read_repetition(ParserState([0x0a, 0x01, 0xe9, 0x03, 0x7a, 0xe9, 0x03, 0x7a])) ==
-            Point2i[(0, 0), (122, 61), (244, 122)]
+            Point{2, Int64}[(0, 0), (122, 61), (244, 122)]
         @test OasisTools.read_repetition(ParserState([0x0b, 0x01, 0x02, 0xe9, 0x03, 0x7a, 0xe9, 0x03, 0x7a])) ==
-            Point2i[(0, 0), (244, 122), (488, 244)]
+            Point{2, Int64}[(0, 0), (244, 122), (488, 244)]
     end
     @testset "Intervals" begin
         @test OasisTools.read_interval(ParserState([0x00, 0x80, 0x01, 0x80, 0x02])) == OasisTools.Interval(0, typemax(UInt64))
@@ -109,14 +109,14 @@ end
 @testset "Point grid range" begin
     p = PointGridRange((1, 1), 3, 2, (1, 1), (0, 2))
     @test length(p) == 6
-    @test first(p) == Point2i(1, 1)
-    @test last(p) == Point2i(3, 5)
+    @test first(p) == Point{2, Int64}(1, 1)
+    @test last(p) == Point{2, Int64}(3, 5)
     @test size(p) == (3, 2)
     @test_throws BoundsError p[0]
-    @test p[1] == p[1, 1] == Point2i(1, 1)
-    @test p[2] == p[2, 1] == Point2i(2, 2)
-    @test p[3] == p[3, 1] == Point2i(3, 3)
-    @test p[4] == p[1, 2] == Point2i(1, 3)
+    @test p[1] == p[1, 1] == Point{2, Int64}(1, 1)
+    @test p[2] == p[2, 1] == Point{2, Int64}(2, 2)
+    @test p[3] == p[3, 1] == Point{2, Int64}(3, 3)
+    @test p[4] == p[1, 2] == Point{2, Int64}(1, 3)
     @test_throws BoundsError p[7]
     @test_throws BoundsError p[4, 1]
     @test_throws BoundsError p[1, 3]
@@ -165,8 +165,8 @@ end
         layername = OasisTools.find_reference(layer_number, datatype_number, oas.references.layerNames)
         @test layername == "TOP"
         rectangle_shape = rectangle.shape
-        @test rectangle_shape isa HyperRectangle{2, Int64}
-        @test rectangle_shape == HyperRectangle{2, Int64}(
+        @test rectangle_shape isa Rect{2, Int64}
+        @test rectangle_shape == Rect{2, Int64}(
             Point{2, Int64}(-190, 2870),
             Point{2, Int64}(10, 10)
         )
@@ -281,7 +281,7 @@ TOP
         @test placement.magnification == 0.5
         @test placement.location == Point{2, Int64}(1, 0)
         shape = bottom2.shapes[1].shape
-        @test shape == HyperRectangle{2, Int64}([0, 0], [1, 1])
+        @test shape == Rect{2, Int64}([0, 0], [1, 1])
         middle2 = oas["MIDDLE2"]
         @test length(middle2.cells) == 2
         placement1 = middle2.cells[1]
