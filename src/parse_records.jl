@@ -237,8 +237,8 @@ function parse_rectangle(state)
     repetition = read_repetition(state, info_byte, 6)
 
     lower_left_corner = Point{2, Int64}(x, y)
-    upper_right_corner = Point{2, Int64}(x + width, y + height)
-    rectangle = HyperRectangle{2, Int64}(lower_left_corner, upper_right_corner)
+    size = Point{2, Int64}(width, height)
+    rectangle = HyperRectangle{2, Int64}(lower_left_corner, size)
     shape = Shape(rectangle, layer_number, datatype_number, repetition)
     push!(state.currentCell.shapes, shape)
 end

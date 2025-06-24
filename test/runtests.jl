@@ -168,7 +168,7 @@ end
         @test rectangle_shape isa HyperRectangle{2, Int64}
         @test rectangle_shape == HyperRectangle{2, Int64}(
             Point{2, Int64}(-190, 2870),
-            Point{2, Int64}(-180, 2880)
+            Point{2, Int64}(10, 10)
         )
         top_cell = oas.cells[2]
         cellname = OasisTools.find_reference(top_cell.nameNumber, oas.references.cellNames)
@@ -265,5 +265,34 @@ TOP
    ├─ BOTTOM2 (2×)
    │  └─ ⋯
    └─ BOTTOM"""
+        s = Suppressor.@capture_out Base.show(oas.cells[1].shapes[1])
+        @test s == "Polygon in layer (1/0) at (1, 0)"
+        s = Suppressor.@capture_out Base.show(oas.cells[2].cells[1])
+        @test s == "Placement of cell 6 at (1, 0)"
+        s = Suppressor.@capture_out Base.show(oas.cells[4].cells[1])
+        @test s == "Placement of cell 3 at (-5, -3) (2×)"
+        bottom = oas["BOTTOM"]
+        @test length(bottom.shapes) == 1
+        bottom2 = oas["BOTTOM2"]
+        @test length(bottom2.cells) == 1
+        @test length(bottom2.shapes) == 1
+        placement = bottom2.cells[1]
+        @test placement.rotation == 90
+        @test placement.magnification == 0.5
+        @test placement.location == Point{2, Int64}(1, 0)
+        shape = bottom2.shapes[1].shape
+        @test shape == HyperRectangle{2, Int64}([0, 0], [1, 1])
+        middle2 = oas["MIDDLE2"]
+        @test length(middle2.cells) == 2
+        placement1 = middle2.cells[1]
+        @test placement1.location == Point{2, Int64}(-5, -3)
+        @test placement1.magnification == 1
+        @test placement1.rotation == 0
+        @test placement1.repetition == Point{2, Int64}[(0, 0), (2, 0)]
+        placement2 = middle2.cells[2]
+        @test placement2.location == Point{2, Int64}(-3, -1)
+        @test placement2.magnification == 2
+        @test placement2.rotation == 180
+        @test placement2.repetition == Point{2, Int64}[(0, 0), (2, 0), (4, 0)]
     end
 end
