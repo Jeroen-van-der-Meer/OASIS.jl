@@ -73,7 +73,7 @@ function Base.show(io::IO, shape::Shape{Polygon{2, Int64}})
     _show_shape(io, shape, "Polygon", location)
 end
 
-function Base.show(io::IO, shape::Shape{HyperRectangle{2, Int64}})
+function Base.show(io::IO, shape::Shape{Rect{2, Int64}})
     location = shape.shape.origin + shape.shape.widths .÷ 2
     _show_shape(io, shape, "Rectangle", location)
 end

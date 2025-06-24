@@ -238,7 +238,7 @@ function parse_rectangle(state)
 
     lower_left_corner = Point{2, Int64}(x, y)
     size = Point{2, Int64}(width, height)
-    rectangle = HyperRectangle{2, Int64}(lower_left_corner, size)
+    rectangle = Rect{2, Int64}(lower_left_corner, size)
     shape = Shape(rectangle, layer_number, datatype_number, repetition)
     push!(state.currentCell.shapes, shape)
 end
@@ -533,7 +533,7 @@ function parse_ctrapezoid(state)
     elseif ctrapezoid_type <= 0x17
         ctrapezoid = Triangle{2, Int64}(vertices...)
     else
-        ctrapezoid = HyperRectangle{2, Int64}(vertices...)
+        ctrapezoid = Rect{2, Int64}(vertices...)
     end
     shape = Shape(ctrapezoid, layer_number, datatype_number, repetition)
     push!(state.currentCell.shapes, shape)

@@ -165,8 +165,8 @@ end
         layername = OasisTools.find_reference(layer_number, datatype_number, oas.references.layerNames)
         @test layername == "TOP"
         rectangle_shape = rectangle.shape
-        @test rectangle_shape isa HyperRectangle{2, Int64}
-        @test rectangle_shape == HyperRectangle{2, Int64}(
+        @test rectangle_shape isa Rect{2, Int64}
+        @test rectangle_shape == Rect{2, Int64}(
             Point{2, Int64}(-190, 2870),
             Point{2, Int64}(10, 10)
         )
@@ -281,7 +281,7 @@ TOP
         @test placement.magnification == 0.5
         @test placement.location == Point{2, Int64}(1, 0)
         shape = bottom2.shapes[1].shape
-        @test shape == HyperRectangle{2, Int64}([0, 0], [1, 1])
+        @test shape == Rect{2, Int64}([0, 0], [1, 1])
         middle2 = oas["MIDDLE2"]
         @test length(middle2.cells) == 2
         placement1 = middle2.cells[1]
