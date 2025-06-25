@@ -1,8 +1,9 @@
 using GeometryBasics
 using OasisTools
 import OasisTools: ParserState
-using Test
+using Makie
 import Suppressor
+using Test
 
 @testset "Read data" begin
     @testset "Read unsigned integers" begin
@@ -341,4 +342,12 @@ TOP
             Point{2, Int64}(28801, -17699), Point{2, Int64}(28802, -17696)
         ]
     end
+end
+
+@testset "Plots" begin
+    filename = "polygon.oas" # 130.900 μs (86 allocations: 4.84 KiB)
+    filepath = joinpath(@__DIR__, "testdata", filename)
+    oas = oasisread(filepath)
+    fig = plot_cell(oas["TOP"])
+    @test fig isa Makie.Figure
 end
