@@ -143,12 +143,10 @@ end
         @test length(shapes) == 1
         polygon = top_cell.shapes[1].shape
         @test polygon isa Polygon
-        # Polygons were refactored in GeometryBasics v0.5. We skip the test for older versions.
-        if polygon.exterior isa Vector{Point{2, Int64}}
-            @test polygon.exterior == [
-                Point{2, Int64}(-1000, -1000), Point{2, Int64}(-1000, 0),
-                Point{2, Int64}(0, 1000), Point{2, Int64}(0, 0)
-            ]
+        @test polygon.exterior == [
+            Point{2, Int64}(-1000, -1000), Point{2, Int64}(-1000, 0),
+            Point{2, Int64}(0, 1000), Point{2, Int64}(0, 0)
+        ]
         end
     end
     @testset "Boxes" begin
@@ -315,38 +313,35 @@ TOP
         @test length(cell.shapes) == 7 # Six polygons and the free-version disclaimer.
         @test cell.shapes[1] isa Shape{OasisTools.Text}
         polygon1 = cell.shapes[2]
-        # Polygons were refactored in GeometryBasics v0.5. We skip the test for older versions.
-        if polygon1.exterior isa Vector{Point{2, Int64}}
-            @test polygon1.shape.exterior == [
-                Point{2, Int64}(28810, -17702), Point{2, Int64}(28813, -17703),
-                Point{2, Int64}(28813, -17698), Point{2, Int64}(28810, -17696)
-            ]
-            polygon2 = cell.shapes[3]
-            @test polygon2.shape.exterior == [
-                Point{2, Int64}(28796, -17701), Point{2, Int64}(28796, -17705),
-                Point{2, Int64}(28800, -17705), Point{2, Int64}(28803, -17701)
-            ]
-            polygon3 = cell.shapes[4]
-            @test polygon3.shape.exterior == [
-                Point{2, Int64}(28805, -17705), Point{2, Int64}(28807, -17703),
-                Point{2, Int64}(28807, -17698), Point{2, Int64}(28805, -17700)
-            ]
-            polygon4 = cell.shapes[5]
-            @test polygon4.shape.exterior == [
-                Point{2, Int64}(28800, -17707), Point{2, Int64}(28799, -17710),
-                Point{2, Int64}(28806, -17710), Point{2, Int64}(28805, -17707)
-            ]
-            polygon5 = cell.shapes[6]
-            @test polygon5.shape.exterior == [
-                Point{2, Int64}(28809, -17704), Point{2, Int64}(28810, -17706),
-                Point{2, Int64}(28814, -17706), Point{2, Int64}(28813, -17704)
-            ]
-            polygon6 = cell.shapes[7]
-            @test polygon6.shape.exterior == [
-                Point{2, Int64}(28794, -17696), Point{2, Int64}(28797, -17699),
-                Point{2, Int64}(28801, -17699), Point{2, Int64}(28802, -17696)
-            ]
-        end
+        @test polygon1.shape.exterior == [
+            Point{2, Int64}(28810, -17702), Point{2, Int64}(28813, -17703),
+            Point{2, Int64}(28813, -17698), Point{2, Int64}(28810, -17696)
+        ]
+        polygon2 = cell.shapes[3]
+        @test polygon2.shape.exterior == [
+            Point{2, Int64}(28796, -17701), Point{2, Int64}(28796, -17705),
+            Point{2, Int64}(28800, -17705), Point{2, Int64}(28803, -17701)
+        ]
+        polygon3 = cell.shapes[4]
+        @test polygon3.shape.exterior == [
+            Point{2, Int64}(28805, -17705), Point{2, Int64}(28807, -17703),
+            Point{2, Int64}(28807, -17698), Point{2, Int64}(28805, -17700)
+        ]
+        polygon4 = cell.shapes[5]
+        @test polygon4.shape.exterior == [
+            Point{2, Int64}(28800, -17707), Point{2, Int64}(28799, -17710),
+            Point{2, Int64}(28806, -17710), Point{2, Int64}(28805, -17707)
+        ]
+        polygon5 = cell.shapes[6]
+        @test polygon5.shape.exterior == [
+            Point{2, Int64}(28809, -17704), Point{2, Int64}(28810, -17706),
+            Point{2, Int64}(28814, -17706), Point{2, Int64}(28813, -17704)
+        ]
+        polygon6 = cell.shapes[7]
+        @test polygon6.shape.exterior == [
+            Point{2, Int64}(28794, -17696), Point{2, Int64}(28797, -17699),
+            Point{2, Int64}(28801, -17699), Point{2, Int64}(28802, -17696)
+        ]
     end
 end
 
