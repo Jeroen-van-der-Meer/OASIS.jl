@@ -147,7 +147,6 @@ end
             Point{2, Int64}(-1000, -1000), Point{2, Int64}(-1000, 0),
             Point{2, Int64}(0, 1000), Point{2, Int64}(0, 0)
         ]
-        end
     end
     @testset "Boxes" begin
         # Contains: Two layers, cell placement with repetition, rectangles.
