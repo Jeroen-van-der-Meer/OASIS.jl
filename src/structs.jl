@@ -144,6 +144,30 @@ function ParserState(buf::Vector{UInt8})
     return ParserState(Oasis(), Cell([], [], 0), buf, 1, ModalVariables())
 end
 
+struct LazyOasis
+    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
+    cellBytes::Dict{UInt64, Int64} # For each cell, find out where CELL record begins.
+    hierarchy::Dict{UInt64, Vector{UInt64}}
+    metadata::Metadata
+    references::References
+end
+
+function LazyOasis(buf::Vector{UInt8})
+    return LazyOasis(buf, Dict(), Dict(), Metadata(), References())
+end
+
+mutable struct LazyParserState
+    oas::LazyOasis # Lazily loaded contents of the OASIS file.
+    currentCellNumber::UInt64 # Current cell we're looking at.
+    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
+    pos::Int64 # Byte position in buffer.
+    lastPlacementNumber::UInt64 # The only modal variable we'll need, since we keep track of placements.
+end
+
+function LazyParserState(buf::Vector{UInt8})
+    return LazyParserState(LazyOasis(buf), 0, buf, 1, 0)
+end
+
 struct CellHierarchy
     hierarchy::Dict{UInt64, Vector{UInt64}}
     root::UInt64
@@ -160,3 +184,5 @@ CellHierarchy(oas::Oasis) = CellHierarchy(
     Dict(c.nameNumber => [i.nameNumber for i in c.cells]
     for c in oas.cells)
 )
+
+CellHierarchy(oas::LazyOasis) = CellHierarchy(oas.hierarchy)

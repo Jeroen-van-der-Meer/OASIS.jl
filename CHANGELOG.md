@@ -7,6 +7,7 @@
 - Minor performance improvements.
 - TRAPEZOID and CTRAPEZOID records now parse correctly.
 - More lenient dependency compats.
+- Lazy loading.
 
 ## v0.1.0
 

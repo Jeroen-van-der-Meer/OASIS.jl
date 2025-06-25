@@ -1,5 +1,3 @@
-skip_record(state) = return
-
 function parse_start(state)
     version = VersionNumber(read_string(state))
     state.oas.metadata.version = version
@@ -42,22 +40,26 @@ function parse_textstring_ref(state)
     push!(state.oas.references.textStrings, reference)
 end
 
-function parse_propname_impl(state)
-    skip_string(state)
+function parse_propname_impl(state) # FIXME
+    r = read_string(state)
+    println("propname_impl: ", r)
 end
 
-function parse_propname_ref(state)
-    skip_string(state)
-    skip_integer(state)
+function parse_propname_ref(state) # FIXME
+    r = read_string(state)
+    i = rui(state)
+    println("propname_ref: ", r, ", ", i)
 end
 
-function parse_propstring_impl(state)
-    skip_string(state)
+function parse_propstring_impl(state) # FIXME
+    r = read_string(state)
+    println("propstring_impl: ", r)
 end
 
-function parse_propstring_ref(state)
-    skip_string(state)
-    skip_integer(state)
+function parse_propstring_ref(state) # FIXME
+    r = read_string(state)
+    i = rui(state)
+    println("propstring_ref: ", r, ", ", i)
 end
 
 function parse_layername(state)
@@ -76,12 +78,6 @@ function parse_textlayername(state)
     push!(state.oas.references.textLayerNames, layer_reference)
 end
 
-function is_end_of_cell(next_record::UInt8)
-    # The end of a cell is implied when the upcoming record is any of the following:
-    # END, CELLNAME, TEXTSTRING, PROPNAME, PROPSTRING, LAYERNAME, CELL, XNAME
-    return (0x02 <= next_record <= 0x0e) || (next_record == 0x1e) || (next_record == 0x1f)
-end
-
 function parse_cell(state)
     # Whenever a cell is encountered, the following modal variables are reset.
     state.mod.xyAbsolute = true
@@ -97,8 +93,8 @@ function parse_cell(state)
         # record ends. If it ends, this function will likely return to the main parser which
         # also needs to read a byte to find the next record.
         @inbounds record_type = state.buf[state.pos]
-        is_end_of_cell(record_type) ? break : state.pos += 1
-        parse_record(record_type, state)
+        is_end_of_cell(state, record_type) ? break : state.pos += 1
+        parse_record(record_type, state, true)
     end
 end
 
@@ -370,18 +366,6 @@ function parse_trapezoid(state, delta_a_explicit::Bool, delta_b_explicit::Bool)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_trapezoid_ab(state)
-    parse_trapezoid(state, true, true)
-end
-
-function parse_trapezoid_a(state)
-    parse_trapezoid(state, true, false)
-end
-
-function parse_trapezoid_b(state)
-    parse_trapezoid(state, false, true)
-end
-
 ctrapezoid_vertices_0(w::UInt64, h::UInt64) = [
     Point{2, Int64}(0, 0),      Point{2, Int64}(w, 0),
     Point{2, Int64}(w - h, h),  Point{2, Int64}(0, h)]
@@ -453,66 +437,39 @@ ctrapezoid_vertices_22(w::UInt64, ::UInt64) = [
     Point{2, Int64}(0, 2w)]
 ctrapezoid_vertices_23(w::UInt64, ::UInt64) = [
     Point{2, Int64}(w, 0),      Point{2, Int64}(w, 2w),
-    Point{2, Int64}(0, w)]
+    Point{2, Int64}(0, w)] 
 ctrapezoid_vertices_24(w::UInt64, h::UInt64) = [
     Point{2, Int64}(0, 0),      Point{2, Int64}(w, h)]
 ctrapezoid_vertices_25(w::UInt64, ::UInt64) = [
     Point{2, Int64}(0, 0),      Point{2, Int64}(w, w)]
 
 function ctrapezoid_vertices(w::UInt64, h::UInt64, ctrapezoid_type::UInt64)
-    if ctrapezoid_type == 0x00000000
-        return ctrapezoid_vertices_0(w, h)
-    elseif ctrapezoid_type == 0x00000001
-        return ctrapezoid_vertices_1(w, h)
-    elseif ctrapezoid_type == 0x00000002
-        return ctrapezoid_vertices_2(w, h)
-    elseif ctrapezoid_type == 0x00000003
-        return ctrapezoid_vertices_3(w, h)
-    elseif ctrapezoid_type == 0x00000004
-        return ctrapezoid_vertices_4(w, h)
-    elseif ctrapezoid_type == 0x00000005
-        return ctrapezoid_vertices_5(w, h)
-    elseif ctrapezoid_type == 0x00000006
-        return ctrapezoid_vertices_6(w, h)
-    elseif ctrapezoid_type == 0x00000007
-        return ctrapezoid_vertices_7(w, h)
-    elseif ctrapezoid_type == 0x00000008
-        return ctrapezoid_vertices_8(w, h)
-    elseif ctrapezoid_type == 0x00000009
-        return ctrapezoid_vertices_9(w, h)
-    elseif ctrapezoid_type == 0x0000000a
-        return ctrapezoid_vertices_10(w, h)
-    elseif ctrapezoid_type == 0x0000000b
-        return ctrapezoid_vertices_11(w, h)
-    elseif ctrapezoid_type == 0x0000000c
-        return ctrapezoid_vertices_12(w, h)
-    elseif ctrapezoid_type == 0x0000000d
-        return ctrapezoid_vertices_13(w, h)
-    elseif ctrapezoid_type == 0x0000000e
-        return ctrapezoid_vertices_14(w, h)
-    elseif ctrapezoid_type == 0x0000000f
-        return ctrapezoid_vertices_15(w, h)
-    elseif ctrapezoid_type == 0x00000010
-        return ctrapezoid_vertices_16(w, h)
-    elseif ctrapezoid_type == 0x00000011
-        return ctrapezoid_vertices_17(w, h)
-    elseif ctrapezoid_type == 0x00000012
-        return ctrapezoid_vertices_18(w, h)
-    elseif ctrapezoid_type == 0x00000013
-        return ctrapezoid_vertices_19(w, h)
-    elseif ctrapezoid_type == 0x00000014
-        return ctrapezoid_vertices_20(w, h)
-    elseif ctrapezoid_type == 0x00000015
-        return ctrapezoid_vertices_21(w, h)
-    elseif ctrapezoid_type == 0x00000016
-        return ctrapezoid_vertices_22(w, h)
-    elseif ctrapezoid_type == 0x00000017
-        return ctrapezoid_vertices_23(w, h)
-    elseif ctrapezoid_type == 0x00000018
-        return ctrapezoid_vertices_24(w, h)
-    elseif ctrapezoid_type == 0x00000019
-        return ctrapezoid_vertices_25(w, h)
-    end
+    ctrapezoid_type == 0x00000000 && return ctrapezoid_vertices_0(w, h)
+    ctrapezoid_type == 0x00000001 && return ctrapezoid_vertices_1(w, h)
+    ctrapezoid_type == 0x00000002 && return ctrapezoid_vertices_2(w, h)
+    ctrapezoid_type == 0x00000003 && return ctrapezoid_vertices_3(w, h)
+    ctrapezoid_type == 0x00000004 && return ctrapezoid_vertices_4(w, h)
+    ctrapezoid_type == 0x00000005 && return ctrapezoid_vertices_5(w, h)
+    ctrapezoid_type == 0x00000006 && return ctrapezoid_vertices_6(w, h)
+    ctrapezoid_type == 0x00000007 && return ctrapezoid_vertices_7(w, h)
+    ctrapezoid_type == 0x00000008 && return ctrapezoid_vertices_8(w, h)
+    ctrapezoid_type == 0x00000009 && return ctrapezoid_vertices_9(w, h)
+    ctrapezoid_type == 0x0000000a && return ctrapezoid_vertices_10(w, h)
+    ctrapezoid_type == 0x0000000b && return ctrapezoid_vertices_11(w, h)
+    ctrapezoid_type == 0x0000000c && return ctrapezoid_vertices_12(w, h)
+    ctrapezoid_type == 0x0000000d && return ctrapezoid_vertices_13(w, h)
+    ctrapezoid_type == 0x0000000e && return ctrapezoid_vertices_14(w, h)
+    ctrapezoid_type == 0x0000000f && return ctrapezoid_vertices_15(w, h)
+    ctrapezoid_type == 0x00000010 && return ctrapezoid_vertices_16(w, h)
+    ctrapezoid_type == 0x00000011 && return ctrapezoid_vertices_17(w, h)
+    ctrapezoid_type == 0x00000012 && return ctrapezoid_vertices_18(w, h)
+    ctrapezoid_type == 0x00000013 && return ctrapezoid_vertices_19(w, h)
+    ctrapezoid_type == 0x00000014 && return ctrapezoid_vertices_20(w, h)
+    ctrapezoid_type == 0x00000015 && return ctrapezoid_vertices_21(w, h)
+    ctrapezoid_type == 0x00000016 && return ctrapezoid_vertices_22(w, h)
+    ctrapezoid_type == 0x00000017 && return ctrapezoid_vertices_23(w, h)
+    ctrapezoid_type == 0x00000018 && return ctrapezoid_vertices_24(w, h)
+    ctrapezoid_type == 0x00000019 && return ctrapezoid_vertices_25(w, h)
 end
 
 function parse_ctrapezoid(state)
@@ -552,37 +509,43 @@ function parse_circle(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_property(state)
-    # We ignore properties. The code here is only meant to figure out how many bytes to skip.
+function parse_property(state) # FIXME
     info_byte = read_byte(state)
     propname_explicit = bit_is_nonzero(info_byte, 6)
     if propname_explicit
         propname_as_reference = bit_is_nonzero(info_byte, 7)
         if propname_as_reference
-            skip_integer(state)
+            i = rui(state)
+            println("propname as reference: ", i)
         else
-            skip_string(state)
+            r = read_string(state)
+            println("propname as string: ", r)
         end
     end
     value_list_implicit = bit_is_nonzero(info_byte, 5)
     if !value_list_implicit
         number_of_values = info_byte >> 4
+        println("number of values: ", number_of_values)
         if number_of_values == 0x0f
             number_of_values = rui(state)
+            println("number of values, for real now: ", number_of_values)
         end
         for _ in 1:number_of_values
-            skip_property_value(state)
+            v = read_property_value(state)
+            println("property value: ", v)
         end
+    else
+        println("property value is implied")
     end
 end
 
-function parse_cblock(state)
+function parse_cblock(state, in_cell::Bool)
     comp_type = rui(state)
     @assert comp_type == 0x00 "Unknown compression type encountered"
     uncomp_byte_count = rui(state)
     comp_byte_count = rui(state)
-    
-    comp_bytes = read_bytes(state, comp_byte_count)
+
+    comp_bytes = view_bytes(state, comp_byte_count)
     z = DeflateDecompressorStream(IOBuffer(comp_bytes))
     buf_decompress = Vector{UInt8}(undef, uncomp_byte_count)
     read!(z, buf_decompress)
@@ -592,84 +555,100 @@ function parse_cblock(state)
 
     while state_decomp.pos <= uncomp_byte_count
         record_type = read_byte(state_decomp)
-        parse_record(record_type, state_decomp)
+        parse_record(record_type, state_decomp, in_cell)
     end
 end
 
-function parse_record(record_type::UInt8, state)
-    # Very common:
-    if record_type == 17 # PLACEMENT
-        parse_placement(state)
-    elseif record_type == 20 # RECTANGLE
-        parse_rectangle(state)
-    elseif record_type == 21 # POLYGON
-        parse_polygon(state)
-    elseif record_type == 4 # CELLNAME
-        parse_cellname_ref(state)
-    elseif record_type == 13 # CELL
-        parse_cell_ref(state)
-    # Common:
-    elseif record_type == 11 # LAYERNAME
-        parse_layername(state)
-    elseif record_type == 12 # LAYERNAME
-        parse_textlayername(state)
-    elseif record_type == 18 # PLACEMENT
-        parse_placement_mag_angle(state)
-    elseif record_type == 22 # PATH
-        parse_path(state)
-    elseif record_type == 34 # CBLOCK
-        parse_cblock(state)
-    # Not so common:
-    elseif record_type == 3 # CELLNAME
-        parse_cellname_impl(state)
-    elseif record_type == 5 # TEXTSTRING
-        parse_textstring_impl(state)
-    elseif record_type == 6 # TEXTSTRING
-        parse_textstring_ref(state)
-    elseif record_type == 7 # PROPNAME
-        parse_propname_impl(state)
-    elseif record_type == 8 # PROPNAME
-        parse_propname_ref(state)
-    elseif record_type == 9 # PROPSTRING
-        parse_propstring_impl(state)
-    elseif record_type == 10 # PROPSTRING
-        parse_propstring_ref(state)
-    elseif record_type == 14 # CELL
-        parse_cell_str(state)
-    elseif record_type == 15 # XYABSOLUTE
-        parse_xyabsolute(state)
-    elseif record_type == 16 # XYRELATIVE
-        parse_xyrelative(state)
-    elseif record_type == 19 # TEXT
-        parse_text(state)
-    elseif record_type == 23 # TRAPEZOID
-        parse_trapezoid(state, true, true)
-    elseif record_type == 24 # TRAPEZOID
-        parse_trapezoid(state, true, false)
-    elseif record_type == 25 # TRAPEZOID
-        parse_trapezoid(state, false, true)
-    elseif record_type == 26 # CTRAPEZOID
-        parse_ctrapezoid(state)
-    elseif record_type == 27 # CIRCLE
-        parse_circle(state)
-    elseif record_type == 28 # PROPERTY
-        parse_property(state)
-    elseif record_type == 29 # PROPERTY
-        skip_record(state)
-    # Very uncommon:
-    elseif record_type == 0 # PAD
-        skip_record(state)
-    elseif record_type == 1 # START
-        parse_start(state)
-    elseif record_type == 2 # END
-        skip_record(state)
-    elseif record_type == 30
-        @error "Not implemented"
-    elseif record_type == 31
-        @error "Not implemented"
-    elseif record_type == 32
-        @error "Not implemented"
-    elseif record_type == 33
-        @error "Not implemented"
+function parse_record(record_type::UInt8, state::ParserState, in_cell::Bool)
+    # Switch statements have been shuffled corresponding to how common each record type is.
+    if in_cell
+        record_type == 17 && return parse_placement(state) # PLACEMENT
+        record_type == 20 && return parse_rectangle(state) # RECTANGLE
+        record_type == 21 && return parse_polygon(state) # POLYGON
+        record_type == 18 && return parse_placement_mag_angle(state) # PLACEMENT
+        record_type == 22 && return parse_path(state) # PATH
+        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
+        record_type == 15 && return parse_xyabsolute(state) # XYABSOLUTE
+        record_type == 16 && return parse_xyrelative(state) # XYRELATIVE
+        record_type == 19 && return parse_text(state) # TEXT
+        record_type == 28 && return skip_property(state) # PROPERTY
+        record_type == 29 && return skip_record(state) # PROPERTY
+        record_type == 23 && return parse_trapezoid(state, true, true) # TRAPEZOID
+        record_type == 24 && return parse_trapezoid(state, true, false) # TRAPEZOID
+        record_type == 25 && return parse_trapezoid(state, false, true) # TRAPEZOID
+        record_type == 26 && return parse_ctrapezoid(state) # CTRAPEZOID
+        record_type == 27 && return parse_circle(state) # CIRCLE
+        record_type == 0  && return skip_record(state) # PAD
+        record_type == 32 && error("XELEMENT record encountered; not implemented yet") # XELEMENT
+        record_type == 33 && error("XGEOMETRY record encountered; not implemented yet") # XGEOMETRY
+    else
+        record_type == 4  && return parse_cellname_ref(state) # CELLNAME
+        record_type == 13 && return parse_cell_ref(state) # CELL
+        record_type == 11 && return parse_layername(state) # LAYERNAME
+        record_type == 12 && return parse_textlayername(state) # LAYERNAME
+        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
+        record_type == 3  && return parse_cellname_impl(state) # CELLNAME
+        record_type == 5  && return parse_textstring_impl(state) # TEXTSTRING
+        record_type == 6  && return parse_textstring_ref(state) # TEXTSTRING
+        record_type == 7  && return skip_propname_impl(state) # PROPNAME
+        record_type == 8  && return skip_propname_ref(state) # PROPNAME
+        record_type == 9  && return skip_propstring_impl(state) # PROPSTRING
+        record_type == 10 && return skip_propstring_ref(state) # PROPSTRING
+        record_type == 14 && return parse_cell_str(state) # CELL
+        record_type == 28 && return skip_property(state) # PROPERTY
+        record_type == 29 && return skip_record(state) # PROPERTY
+        record_type == 0  && return skip_record(state) # PAD
+        record_type == 1  && return parse_start(state) # START
+        record_type == 2  && return skip_record(state) # END
+        record_type == 30 && error("XNAME record encountered; not implemented yet") # XNAME
+        record_type == 31 && error("XNAME record encountered; not implemented yet") # XNAME
     end
+    error("No suitable record type found; file may be corrupted")
+end
+
+function parse_record(record_type::UInt8, state::LazyParserState, in_cell::Bool)
+    # Switch statements have been shuffled corresponding to how common each record type is.
+    if in_cell
+        record_type == 17 && return skip_placement(state) # PLACEMENT
+        record_type == 20 && return skip_rectangle(state) # RECTANGLE
+        record_type == 21 && return skip_polygon(state) # POLYGON
+        record_type == 18 && return skip_placement_mag_angle(state) # PLACEMENT
+        record_type == 22 && return skip_path(state) # PATH
+        record_type == 34 && return skip_cblock(state) # CBLOCK
+        record_type == 15 && return skip_record(state) # XYABSOLUTE
+        record_type == 16 && return skip_record(state) # XYRELATIVE
+        record_type == 19 && return skip_text(state) # TEXT
+        record_type == 28 && return skip_property(state) # PROPERTY
+        record_type == 29 && return skip_record(state) # PROPERTY
+        record_type == 23 && return skip_trapezoid(state, true, true) # TRAPEZOID
+        record_type == 24 && return skip_trapezoid(state, true, false) # TRAPEZOID
+        record_type == 25 && return skip_trapezoid(state, false, true) # TRAPEZOID
+        record_type == 26 && return skip_ctrapezoid(state) # CTRAPEZOID
+        record_type == 27 && return skip_circle(state) # CIRCLE
+        record_type == 0  && return skip_record(state) # PAD
+        record_type == 32 && error("XELEMENT record encountered; not implemented yet") # XELEMENT
+        record_type == 33 && error("XGEOMETRY record encountered; not implemented yet") # XGEOMETRY
+    else
+        record_type == 4  && return parse_cellname_ref(state) # CELLNAME
+        record_type == 13 && return skip_cell_ref(state) # CELL
+        record_type == 11 && return parse_layername(state) # LAYERNAME
+        record_type == 12 && return parse_textlayername(state) # LAYERNAME
+        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
+        record_type == 3  && return parse_cellname_impl(state) # CELLNAME
+        record_type == 5  && return parse_textstring_impl(state) # TEXTSTRING
+        record_type == 6  && return parse_textstring_ref(state) # TEXTSTRING
+        record_type == 7  && return skip_propname_impl(state) # PROPNAME
+        record_type == 8  && return skip_propname_ref(state) # PROPNAME
+        record_type == 9  && return skip_propstring_impl(state) # PROPSTRING
+        record_type == 10 && return skip_propstring_ref(state) # PROPSTRING
+        record_type == 14 && return skip_cell_str(state) # CELL
+        record_type == 28 && return skip_property(state) # PROPERTY
+        record_type == 29 && return skip_record(state) # PROPERTY
+        record_type == 0  && return skip_record(state) # PAD
+        record_type == 1  && return parse_start(state) # START
+        record_type == 2  && return skip_record(state) # END
+        record_type == 30 && error("XNAME record encountered; not implemented yet") # XNAME
+        record_type == 31 && error("XNAME record encountered; not implemented yet") # XNAME
+    end
+    error("No suitable record type found; file may be corrupted")
 end

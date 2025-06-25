@@ -71,3 +71,23 @@ function cellname_to_cellname_number(state, cellname::String)
     end
     return cellname_number
 end
+
+function is_end_of_cell(state, next_record::UInt8)
+    # The end of a cell is implied when the upcoming record is any of the following:
+    # END, CELLNAME, TEXTSTRING, PROPNAME, PROPSTRING, LAYERNAME, CELL, XNAME
+    if (0x02 <= next_record <= 0x0e) || (next_record == 0x1e) || (next_record == 0x1f)
+        return true
+    elseif next_record == 34
+        # If a CBLOCK is encountered, the first record within the CBLOCK implies whether or
+        # not the CBLOCK belongs to the cell or not.
+        comp_type = state.buf[state.pos + 1]
+        @assert comp_type == 0x00 "Unknown compression type encountered"
+        comp_byte_count = state.buf[state.pos + 3]
+        comp_bytes = @view state.buf[(state.pos + 4):(state.pos + 4 + comp_byte_count - 1)]
+        z = DeflateDecompressorStream(IOBuffer(comp_bytes))
+        first_record_in_cblock = read(z, UInt8)
+        return is_end_of_cell(state, first_record_in_cblock)
+    else
+        return false
+    end
+end

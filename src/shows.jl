@@ -27,6 +27,16 @@ function show_cells(oas::Oasis; maxdepth = 100, flat = false, io = stdout)
     end
 end
 
+function show_cells(oas::LazyOasis; maxdepth = 100, flat = false, io = stdout)
+    if flat
+        for k in keys(oas.hierarchy)
+            println(io, find_reference(k, oas.references.cellNames))
+        end
+    else
+        _show_hierarchy(oas; maxdepth = maxdepth, io = io)
+    end
+end
+
 # Same as show_cells(oas) but starting from a specified cell
 function show_cells(cell::Cell; maxdepth = 100, flat = false, io = stdout)
     if flat
@@ -47,6 +57,13 @@ end
 function Base.show(io::IO, oas::Oasis)
     print(io,
         "OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ",
+        "with the following cells: \n")
+    show_cells(oas; maxdepth = 2, flat = false, io = io)
+end
+
+function Base.show(io::IO, oas::LazyOasis)
+    print(io,
+        "Lazy OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ",
         "with the following cells: \n")
     show_cells(oas; maxdepth = 2, flat = false, io = io)
 end
@@ -91,7 +108,7 @@ end
 # Internal functions
 
 function _show_hierarchy(
-    oas::Oasis;
+    oas;
     cell_hierarchy = CellHierarchy(oas),
     maxdepth = 100, io = stdout, count = 1,
     current_depth = 0, prefix = "", last = true, root = cell_hierarchy.root

@@ -31,23 +31,15 @@ read_four_byte_float(state) = Float64(read(IOBuffer(read_bytes(state, 4)), Float
 read_eight_byte_float(state) = read(IOBuffer(read_bytes(state, 8)), Float64)
 
 function read_real(state, format::UInt8)
-    if format == 0x00
-        return read_positive_whole_number(state)
-    elseif format == 0x01
-        return read_negative_whole_number(state)
-    elseif format == 0x02
-        return read_positive_reciprocal(state)
-    elseif format == 0x03
-        return read_negative_reciprocal(state)
-    elseif format == 0x04
-        return read_positive_ratio(state)
-    elseif format == 0x05
-        return read_negative_ratio(state)
-    elseif format == 0x06
-        return read_four_byte_float(state)
-    else
-        return read_eight_byte_float(state)
-    end
+    format == 0 && return read_positive_whole_number(state)
+    format == 1 && return read_negative_whole_number(state)
+    format == 2 && return read_positive_reciprocal(state)
+    format == 3 && return read_negative_reciprocal(state)
+    format == 4 && return read_positive_ratio(state)
+    format == 5 && return read_negative_ratio(state)
+    format == 6 && return read_four_byte_float(state)
+    format == 7 && return read_eight_byte_float(state)
+    error("Unknown real format; file may be corrupted")
 end
 
 function read_real(state)
@@ -77,23 +69,15 @@ southwest_integer(mag::UInt64) = Point{2, Int64}(-signed(mag), -signed(mag))
 southeast_integer(mag::UInt64) = Point{2, Int64}(signed(mag), -signed(mag))
 
 function read_delta(dir::UInt64, magnitude::UInt64)
-    if dir == 0x00000000
-        return east_integer(magnitude)
-    elseif dir == 0x00000001
-        return north_integer(magnitude)
-    elseif dir == 0x00000002
-        return west_integer(magnitude)
-    elseif dir == 0x00000003
-        return south_integer(magnitude)
-    elseif dir == 0x00000004
-        return northeast_integer(magnitude)
-    elseif dir == 0x00000005
-        return northwest_integer(magnitude)
-    elseif dir == 0x00000006
-        return southwest_integer(magnitude)
-    else
-        return southeast_integer(magnitude)
-    end
+    dir == 0 && return east_integer(magnitude)
+    dir == 1 && return north_integer(magnitude)
+    dir == 2 && return west_integer(magnitude)
+    dir == 3 && return south_integer(magnitude)
+    dir == 4 && return northeast_integer(magnitude)
+    dir == 5 && return northwest_integer(magnitude)
+    dir == 6 && return southwest_integer(magnitude)
+    dir == 7 && return southeast_integer(magnitude)
+    error("Unknown delta direction; file may be corrupted")
 end
 
 function read_2_delta(Δ::UInt64)
@@ -221,31 +205,19 @@ read_repetition_type_11(state) = collect_repetitions_g(state, rui(state) + 2; gr
 function read_repetition(state)
     type = read_byte(state)
     # Ordering is changed based on what appears to be used most often in practice.
-    if type == 0x00
-        return read_repetition_type_0(state)
-    elseif type == 0x01
-        return read_repetition_type_1(state)
-    elseif type == 0x08
-        return read_repetition_type_8(state)
-    elseif type == 0x02
-        return read_repetition_type_2(state)
-    elseif type == 0x03
-        return read_repetition_type_3(state)
-    elseif type == 0x0b
-        return read_repetition_type_11(state)
-    elseif type == 0x0a
-        return read_repetition_type_10(state)
-    elseif type == 0x09
-        return read_repetition_type_9(state)
-    elseif type == 0x04
-        return read_repetition_type_4(state)
-    elseif type == 0x05
-        return read_repetition_type_5(state)
-    elseif type == 0x06
-        return read_repetition_type_6(state)
-    elseif type == 0x07
-        return read_repetition_type_7(state)
-    end
+    type == 0  && return read_repetition_type_0(state)
+    type == 1  && return read_repetition_type_1(state)
+    type == 8  && return read_repetition_type_8(state)
+    type == 2  && return read_repetition_type_2(state)
+    type == 3  && return read_repetition_type_3(state)
+    type == 11 && return read_repetition_type_11(state)
+    type == 10 && return read_repetition_type_10(state)
+    type == 9  && return read_repetition_type_9(state)
+    type == 4  && return read_repetition_type_4(state)
+    type == 5  && return read_repetition_type_5(state)
+    type == 6  && return read_repetition_type_6(state)
+    type == 7  && return read_repetition_type_7(state)
+    error("Unknown repetition type; file may be corrupted")
 end
 
 function read_1_delta_list_horizontal_first(state, vc::UInt64)
@@ -300,19 +272,12 @@ function read_point_list(state)
     type = read_byte(state)
     vertex_count = rui(state)
     # Ordering is changed based on what appears to be used most often in practice.
-    if type == 0x01
-        return read_1_delta_list_vertical_first(state, vertex_count)
-    elseif type == 0x04
-        return read_g_delta_list(state, vertex_count)
-    elseif type == 0x00
-        return read_1_delta_list_horizontal_first(state, vertex_count)
-    elseif type == 0x02
-        return read_2_delta_list(state, vertex_count)
-    elseif type == 0x03
-        return read_3_delta_list(state, vertex_count)
-    elseif type == 0x05
-        return cumsum(read_g_delta_list(state, vertex_count))
-    end
+    type == 0x01 && return read_1_delta_list_vertical_first(state, vertex_count)
+    type == 0x04 && return read_g_delta_list(state, vertex_count)
+    type == 0x00 && return read_1_delta_list_horizontal_first(state, vertex_count)
+    type == 0x02 && return read_2_delta_list(state, vertex_count)
+    type == 0x03 && return read_3_delta_list(state, vertex_count)
+    type == 0x05 && return cumsum(read_g_delta_list(state, vertex_count))
 end
 
 function read_property_value(state)
@@ -344,17 +309,12 @@ read_interval_type_4(state) = Interval(rui(state), rui(state))
 function read_interval(state)
     type = read_byte(state)
     # Ordering is changed based on what appears to be used most often in practice.
-    if type == 0x03
-        return read_interval_type_3(state)
-    elseif type == 0x00
-        return read_interval_type_0(state)
-    elseif type == 0x01
-        return read_interval_type_1(state)
-    elseif type == 0x02
-        return read_interval_type_2(state)
-    elseif type == 0x04
-        return read_interval_type_4(state)
-    end
+    type == 3 && return read_interval_type_3(state)
+    type == 0 && return read_interval_type_0(state)
+    type == 1 && return read_interval_type_1(state)
+    type == 2 && return read_interval_type_2(state)
+    type == 4 && return read_interval_type_4(state)
+    error("Unknown interval type; file may be corrupted")
 end
 
 function read_byte(state)
@@ -365,6 +325,12 @@ end
 
 function read_bytes(state, nbytes::Integer)
     @inbounds b = state.buf[state.pos:(state.pos + nbytes - 1)]
+    state.pos += nbytes
+    return b
+end
+
+function view_bytes(state, nbytes::Integer)
+    @inbounds b = @view state.buf[state.pos:(state.pos + nbytes - 1)]
     state.pos += nbytes
     return b
 end
