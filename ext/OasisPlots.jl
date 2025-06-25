@@ -2,9 +2,11 @@ module OasisPlots
 
 if isdefined(Base, :get_extension)
     using OasisTools
-    using GeometryBasics
+else
+    using ..OasisTools
 end
 
+using GeometryBasics
 using Makie
 
 function OasisTools.plot_shape!(ax::Axis, shape::Shape{<:Any})

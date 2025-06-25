@@ -23,12 +23,12 @@ include("parse_records.jl")
 include("skip_records.jl")
 include("parse_utils.jl")
 include("shows.jl")
-if !isdefined(Base, :get_extension)
-    include("../ext/OasisPlots.jl")
-end
 
 function plot_cell end
 function plot_shape! end
+if !isdefined(Base, :get_extension)
+    include("../ext/OasisPlots.jl")
+end
 
 const MAGIC_BYTES = [0x25, 0x53, 0x45, 0x4d, 0x49, 0x2d, 0x4f, 0x41, 0x53, 0x49, 0x53, 0x0d, 0x0a]
 
