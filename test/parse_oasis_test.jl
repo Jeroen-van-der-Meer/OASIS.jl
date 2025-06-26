@@ -224,6 +224,7 @@ TOP
         ]
     end
     @testset "Two top cells" begin
+        # Contains: A file containing two cells that aren't contained in each other.
         filename = "topcells.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath)
@@ -235,6 +236,20 @@ TOP
 OTHERTOP"""
         s = Suppressor.@capture_out show_cells(oas, "TOP")
         @test s == "TOP"
+    end
+    @testset "Flipped" begin
+        # Contains: A cell placement which is flipped around the x-axis.
+        filename = "flipped.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath)
+        @test oas isa Oasis
+        cell = oas["TOP"]
+        placement1 = placements(cell)[1]
+        @test placement1.rotation == 10
+        @test placement1.flipped == false
+        placement2 = placements(cell)[2]
+        @test placement2.rotation == 10
+        @test placement2.flipped == true
     end
 end
 
@@ -301,5 +316,11 @@ TOP
 OTHERTOP"""
         @test oas["TOP"] isa LazyCell
         @test oas["OTHERTOP"] isa LazyCell
+    end
+    @testset "Flipped" begin
+        filename = "flipped.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        @test oas isa LazyOasis
     end
 end

@@ -91,8 +91,11 @@ Object encoding the placement of a cell in another cell.
 
 - `nameNumber::UInt64`: The cell name number for the cell that is being placed.
 - `location::Point{2, Int64}`: Where the cell will be placed.
-- `rotation::Float64`: Rotation (in degrees) with which the cell will be placed.
-- `magnification::Float64`: Magnification with which the cell will be placed.
+- `rotation::Float64`: Counterclockwise rotation (in degrees) of the cell.
+- `magnification::Float64`: Magnification of the cell.
+- `flipped::Bool`: Indicates whether or not the cell is reflected (or flipped) around the
+  x-axis. Note: If a cell is flipped and has nonzero rotation, then the flip is applied first,
+  and the rotation is applied second.
 - `repetition`: Specifies whether the shape is repeated. If not, `repetition = nothing`.
 """
 struct CellPlacement
@@ -100,6 +103,7 @@ struct CellPlacement
     location::Point{2, Int64}
     rotation::Float64
     magnification::Float64
+    flipped::Bool
     repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
 
@@ -280,7 +284,6 @@ true
 See also [`cell_number`](@ref).
 """
 cell_name(oas::AbstractOasis, cell_number::Integer) = find_reference(cell_number, oas.references.cellNames)
-
 
 """
     cell_number(oas, cell_name)

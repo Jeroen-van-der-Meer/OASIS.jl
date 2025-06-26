@@ -124,7 +124,8 @@ function parse_placement(state)
     location = Point{2, Int64}(x, y)
     rotation = ((info_byte >> 1) & 0x03) * 90
     repetition = read_repetition(state, info_byte, 5)
-    placement = CellPlacement(cellname_number, location, rotation, 1.0, repetition)
+    is_flipped = bit_is_nonzero(info_byte, 8)
+    placement = CellPlacement(cellname_number, location, rotation, 1.0, is_flipped, repetition)
     push!(state.currentCell.placements, placement)
 end
 
@@ -160,7 +161,8 @@ function parse_placement_mag_angle(state)
     x, y = read_or_modal_xy(state, Val(:placementX), Val(:placementY), info_byte, 3)
     location = Point{2, Int64}(x, y)
     repetition = read_repetition(state, info_byte, 5)
-    placement = CellPlacement(cellname_number, location, rotation, magnification, repetition)
+    is_flipped = bit_is_nonzero(info_byte, 8)
+    placement = CellPlacement(cellname_number, location, rotation, magnification, is_flipped, repetition)
     push!(state.currentCell.placements, placement)
 end
 
