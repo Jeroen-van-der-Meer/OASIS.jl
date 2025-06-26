@@ -56,6 +56,20 @@ function read_repetition(
     end
 end
 
+function read_nrep(
+    state,
+    info_byte::UInt8,
+    position::Int64
+)
+    if bit_is_nonzero(info_byte, position)
+        v = read_nrep(state)
+        state.mod.nrep = v
+        return v
+    else
+        return 1
+    end
+end
+
 function bit_is_nonzero(byte::UInt8, position::Integer)
     return isone(byte >> (8 - position) & 0x01)
 end

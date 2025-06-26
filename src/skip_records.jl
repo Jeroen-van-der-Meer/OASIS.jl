@@ -68,11 +68,7 @@ function skip_placement(state)
     end
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
-    if bit_is_nonzero(info_byte, 5)
-        nrep = read_nrep(state)
-    else
-        nrep = 1
-    end
+    nrep = read_nrep(state, info_byte, 5)
     if haskey(state.currentCell.placements, cellname_number)
         state.currentCell.placements[cellname_number] += nrep
     else
@@ -101,11 +97,7 @@ function skip_placement_mag_angle(state)
     bit_is_nonzero(info_byte, 7) && skip_real(state)
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
-    if bit_is_nonzero(info_byte, 5)
-        nrep = read_nrep(state)
-    else
-        nrep = 1
-    end
+    nrep = read_nrep(state, info_byte, 5)
     if haskey(state.currentCell.placements, cellname_number)
         state.currentCell.placements[cellname_number] += nrep
     else

@@ -20,8 +20,8 @@ Base.@kwdef mutable struct ModalVariables
     pathPointList::Vector{Point{2, Int64}} = []
     pathStartExtension::Int64 = 0
     pathEndExtension::Int64 = 0
-    ctrapezoidType::Int64 = 0 # FIXME: Type
-    circleRadius::Int64 = 0 # FIXME: Type
+    ctrapezoidType::UInt64 = 0
+    circleRadius::UInt64 = 0
 end
 
 Base.@kwdef mutable struct LazyModalVariables
