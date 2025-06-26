@@ -40,28 +40,6 @@ function parse_textstring_ref(state)
     push!(state.oas.references.textStrings, reference)
 end
 
-function parse_propname_impl(state) # FIXME
-    r = read_string(state)
-    println("propname_impl: ", r)
-end
-
-function parse_propname_ref(state) # FIXME
-    r = read_string(state)
-    i = rui(state)
-    println("propname_ref: ", r, ", ", i)
-end
-
-function parse_propstring_impl(state) # FIXME
-    r = read_string(state)
-    println("propstring_impl: ", r)
-end
-
-function parse_propstring_ref(state) # FIXME
-    r = read_string(state)
-    i = rui(state)
-    println("propstring_ref: ", r, ", ", i)
-end
-
 function parse_layername(state)
     layername = read_string(state)
     layer_interval = read_interval(state)
@@ -100,21 +78,21 @@ end
 
 function parse_cell_ref(state)
     cellname_number = rui(state)
-    cell = Cell([], [], cellname_number)
+    cell = Cell([], [])
     state.currentCell = cell
 
     parse_cell(state)
-    push!(state.oas.cells, state.currentCell)
+    state.oas.cells[cellname_number] = state.currentCell
 end
 
 function parse_cell_str(state)
     cellname_string = read_string(state)
-    cellname_number = cellname_to_cellname_number(state, cellname_string)
-    cell = Cell([], [], cellname_number)
+    cellname_number = _cellname_to_cellname_number(state, cellname_string)
+    cell = Cell([], [])
     state.currentCell = cell
 
     parse_cell(state)
-    push!(state.oas.cells, state.currentCell)
+    state.oas.cells[cellname_number] = state.currentCell
 end
 
 function parse_xyabsolute(state)
@@ -134,7 +112,7 @@ function parse_placement(state)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = cellname_to_cellname_number(state, cellname)
+            cellname_number = _cellname_to_cellname_number(state, cellname)
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
@@ -147,7 +125,7 @@ function parse_placement(state)
     rotation = ((info_byte >> 1) & 0x03) * 90
     repetition = read_repetition(state, info_byte, 5)
     placement = CellPlacement(cellname_number, location, rotation, 1.0, repetition)
-    push!(state.currentCell.cells, placement)
+    push!(state.currentCell.placements, placement)
 end
 
 function parse_placement_mag_angle(state)
@@ -159,7 +137,7 @@ function parse_placement_mag_angle(state)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = cellname_to_cellname_number(state, cellname)
+            cellname_number = _cellname_to_cellname_number(state, cellname)
             # If a string is used to denote the cellname, find the corresponding reference. If
             # no such reference exists (yet?), create a random one ourselves.
         end
@@ -183,7 +161,7 @@ function parse_placement_mag_angle(state)
     location = Point{2, Int64}(x, y)
     repetition = read_repetition(state, info_byte, 5)
     placement = CellPlacement(cellname_number, location, rotation, magnification, repetition)
-    push!(state.currentCell.cells, placement)
+    push!(state.currentCell.placements, placement)
 end
 
 function parse_text(state)
@@ -195,7 +173,7 @@ function parse_text(state)
             text_number = rui(state)
         else
             text = read_string(state)
-            text_number = cellname_to_cellname_number(state, text)
+            text_number = _cellname_to_cellname_number(state, text)
             # If a string is used to denote the cellname, find the corresponding reference. If
             # no such reference exists (yet?), create a random one ourselves.
         end
@@ -509,36 +487,6 @@ function parse_circle(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_property(state) # FIXME
-    info_byte = read_byte(state)
-    propname_explicit = bit_is_nonzero(info_byte, 6)
-    if propname_explicit
-        propname_as_reference = bit_is_nonzero(info_byte, 7)
-        if propname_as_reference
-            i = rui(state)
-            println("propname as reference: ", i)
-        else
-            r = read_string(state)
-            println("propname as string: ", r)
-        end
-    end
-    value_list_implicit = bit_is_nonzero(info_byte, 5)
-    if !value_list_implicit
-        number_of_values = info_byte >> 4
-        println("number of values: ", number_of_values)
-        if number_of_values == 0x0f
-            number_of_values = rui(state)
-            println("number of values, for real now: ", number_of_values)
-        end
-        for _ in 1:number_of_values
-            v = read_property_value(state)
-            println("property value: ", v)
-        end
-    else
-        println("property value is implied")
-    end
-end
-
 function parse_cblock(state, in_cell::Bool)
     comp_type = rui(state)
     @assert comp_type == 0x00 "Unknown compression type encountered"
@@ -551,8 +499,7 @@ function parse_cblock(state, in_cell::Bool)
     read!(z, buf_decompress)
     close(z)
 
-    state_decomp = ParserState(state.oas, state.currentCell, buf_decompress, 1, state.mod)
-
+    state_decomp = new_state(state.oas, state.currentCell, buf_decompress)
     while state_decomp.pos <= uncomp_byte_count
         record_type = read_byte(state_decomp)
         parse_record(record_type, state_decomp, in_cell)
@@ -614,7 +561,7 @@ function parse_record(record_type::UInt8, state::LazyParserState, in_cell::Bool)
         record_type == 21 && return skip_polygon(state) # POLYGON
         record_type == 18 && return skip_placement_mag_angle(state) # PLACEMENT
         record_type == 22 && return skip_path(state) # PATH
-        record_type == 34 && return skip_cblock(state) # CBLOCK
+        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
         record_type == 15 && return skip_record(state) # XYABSOLUTE
         record_type == 16 && return skip_record(state) # XYRELATIVE
         record_type == 19 && return skip_text(state) # TEXT

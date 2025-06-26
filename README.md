@@ -19,7 +19,7 @@ oasisread(filepath)
 ```
 
 ```
-OASIS file v1.0 with the following cells: 
+OASIS file v1.0 with the following cells:
 TOP
 ├─ BOTTOM2 (3×)
 │  └─ ROCKBOTTOM

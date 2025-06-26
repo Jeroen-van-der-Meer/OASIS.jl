@@ -32,19 +32,21 @@ end
 
 function skip_cell_ref(state)
     cellname_number = rui(state)
-    state.currentCellNumber = cellname_number
-    state.oas.hierarchy[cellname_number] = UInt64[]
-    state.oas.cellBytes[cellname_number] = state.pos
+    cell = LazyCell(state.pos, Dict())
+    state.currentCell = cell
+
     skip_cell(state)
+    state.oas.cells[cellname_number] = state.currentCell
 end
 
-function skip_cell_str(state::LazyParserState)
+function skip_cell_str(state)
     cellname_string = read_string(state)
-    cellname_number = cellname_to_cellname_number(state, cellname_string)
-    state.currentCellNumber = cellname_number
-    state.oas.hierarchy[cellname_number] = UInt64[]
-    state.oas.cellBytes[cellname_number] = state.pos
+    cellname_number = _cellname_to_cellname_number(state, cellname_string)
+    cell = LazyCell(state.pos, Dict())
+    state.currentCell = cell
+
     skip_cell(state)
+    state.oas.cells[cellname_number] = state.currentCell
 end
 
 function skip_placement(state)
@@ -56,18 +58,26 @@ function skip_placement(state)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = cellname_to_cellname_number(state, cellname)
+            cellname_number = _cellname_to_cellname_number(state, cellname)
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
-        state.lastPlacementNumber = cellname_number
+        state.mod.placementCell = cellname_number
     else
-        cellname_number = state.lastPlacementNumber
+        cellname_number = state.mod.placementCell
     end
-    push!(state.oas.hierarchy[state.currentCellNumber], cellname_number)
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
-    bit_is_nonzero(info_byte, 5) && skip_repetition(state)
+    if bit_is_nonzero(info_byte, 5)
+        nrep = read_nrep(state)
+    else
+        nrep = 1
+    end
+    if haskey(state.currentCell.placements, cellname_number)
+        state.currentCell.placements[cellname_number] += nrep
+    else
+        state.currentCell.placements[cellname_number] = nrep
+    end
 end
 
 function skip_placement_mag_angle(state)
@@ -79,20 +89,28 @@ function skip_placement_mag_angle(state)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = cellname_to_cellname_number(state, cellname)
+            cellname_number = _cellname_to_cellname_number(state, cellname)
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
-        state.lastPlacementNumber = cellname_number
+        state.mod.placementCell = cellname_number
     else
-        cellname_number = state.lastPlacementNumber
+        cellname_number = state.mod.placementCell
     end
-    push!(state.oas.hierarchy[state.currentCellNumber], cellname_number)
     bit_is_nonzero(info_byte, 6) && skip_real(state)
     bit_is_nonzero(info_byte, 7) && skip_real(state)
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
-    bit_is_nonzero(info_byte, 5) && skip_repetition(state)
+    if bit_is_nonzero(info_byte, 5)
+        nrep = read_nrep(state)
+    else
+        nrep = 1
+    end
+    if haskey(state.currentCell.placements, cellname_number)
+        state.currentCell.placements[cellname_number] += nrep
+    else
+        state.currentCell.placements[cellname_number] = nrep
+    end
 end
 
 function skip_text(state)

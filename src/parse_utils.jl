@@ -63,7 +63,7 @@ end
 # PLACEMENT records can either use CELLNAME references or strings to refer to what cell is being
 # placed. For consistency, we wish to always log a reference number. However, there is no
 # guarantee that such reference exists, so we'll have to manually create it.
-function cellname_to_cellname_number(state, cellname::String)
+function _cellname_to_cellname_number(state, cellname::String)
     cellname_number = find_reference(cellname, state.oas.references.cellNames)
     if isnothing(cellname_number)
         cellname_number = rand(UInt64)

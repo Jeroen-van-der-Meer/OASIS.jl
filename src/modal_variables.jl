@@ -23,3 +23,8 @@ Base.@kwdef mutable struct ModalVariables
     ctrapezoidType::Int64 = 0 # FIXME: Type
     circleRadius::Int64 = 0 # FIXME: Type
 end
+
+Base.@kwdef mutable struct LazyModalVariables
+    nrep::Int64 = 0
+    placementCell::UInt64 = 0
+end

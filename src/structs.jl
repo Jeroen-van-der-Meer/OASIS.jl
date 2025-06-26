@@ -29,13 +29,13 @@ struct NumericReference <: AbstractReference
     number::UInt64
 end
 
-function find_reference(number::UInt64, references::AbstractVector{NumericReference})
+function find_reference(number::Integer, references::AbstractVector{NumericReference})
     index = findfirst(r -> r.number == number, references)
     isnothing(index) && return index
     return references[index].name
 end
 
-function find_reference(name::String, references::AbstractVector{NumericReference})
+function find_reference(name::AbstractString, references::AbstractVector{NumericReference})
     index = findfirst(r -> r.name == name, references)
     isnothing(index) && return index
     return references[index].number
@@ -103,9 +103,24 @@ end
 """
 struct Cell
     shapes::Vector{Shape} # Might have references to other cells within them?
-    cells::Vector{CellPlacement} # Other cells
-    nameNumber::UInt64
+    placements::Vector{CellPlacement} # Other cells
 end
+
+shapes(cell::Cell) = cell.shapes
+placements(cell::Cell) = cell.placements
+
+# This should be a recursive function somehow...
+# Should return I guess a dictionary where, for each relevant cell ID, it spits out coordinates.
+# Problem: How will we do this with our lazy parser? it would be a pain to go through everything
+# yet again....
+# That said, it's probably the best option.
+
+struct LazyCell
+    byte::Int64
+    placements::Dict{UInt64, Int64} # Indicates how often other cells are placed in this one.
+end
+
+abstract type AbstractOasis end
 
 """
     struct Oasis(cells, metadata, references)
@@ -120,17 +135,31 @@ Object containing all the data of your OASIS file.
   etc. are stored only once and are then referenced with a number. We mirror this behaviour in
   `OasisTools.jl`.
 """
-Base.@kwdef struct Oasis
-    cells::Vector{Cell} = []
+Base.@kwdef struct Oasis <: AbstractOasis
+    cells::Dict{UInt64, Cell} = Dict()
     metadata::Metadata = Metadata()
     references::References = References()
 end
 
-function Base.getindex(oas::Oasis, cell_name::String)
-    cell_number = find_reference(cell_name, oas.references.cellNames)
-    cell_index = findfirst(c -> c.nameNumber == cell_number, oas.cells)
-    return oas.cells[cell_index]
+struct LazyOasis <: AbstractOasis
+    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
+    cells::Dict{UInt64, LazyCell}
+    metadata::Metadata
+    references::References
 end
+
+function LazyOasis(buf::Vector{UInt8})
+    return LazyOasis(buf, Dict(), Metadata(), References())
+end
+
+function Base.getindex(oas::AbstractOasis, cell_name::String)
+    return getindex(cells(oas), cell_number(oas, cell_name))
+end
+
+cells(oas::AbstractOasis) = oas.cells
+cell_names(oas::AbstractOasis) = [c.name for c in oas.references.cellNames]
+cell_name(oas::AbstractOasis, cell_number::Integer) = find_reference(cell_number, oas.references.cellNames)
+cell_number(oas::AbstractOasis, cell_name::AbstractString) = find_reference(cell_name, oas.references.cellNames)
 
 mutable struct ParserState
     oas::Oasis # Contents of the OASIS file.
@@ -141,48 +170,55 @@ mutable struct ParserState
 end
 
 function ParserState(buf::Vector{UInt8})
-    return ParserState(Oasis(), Cell([], [], 0), buf, 1, ModalVariables())
-end
-
-struct LazyOasis
-    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
-    cellBytes::Dict{UInt64, Int64} # For each cell, find out where CELL record begins.
-    hierarchy::Dict{UInt64, Vector{UInt64}}
-    metadata::Metadata
-    references::References
-end
-
-function LazyOasis(buf::Vector{UInt8})
-    return LazyOasis(buf, Dict(), Dict(), Metadata(), References())
+    return ParserState(Oasis(), Cell([], []), buf, 1, ModalVariables())
 end
 
 mutable struct LazyParserState
     oas::LazyOasis # Lazily loaded contents of the OASIS file.
-    currentCellNumber::UInt64 # Current cell we're looking at.
+    currentCell::LazyCell # Current cell we're looking at.
     buf::Vector{UInt8} # Mmapped buffer of OASIS file.
     pos::Int64 # Byte position in buffer.
-    lastPlacementNumber::UInt64 # The only modal variable we'll need, since we keep track of placements.
+    mod::LazyModalVariables
 end
 
 function LazyParserState(buf::Vector{UInt8})
-    return LazyParserState(LazyOasis(buf), 0, buf, 1, 0)
+    return LazyParserState(LazyOasis(buf), LazyCell(0, Dict()), buf, 1, LazyModalVariables())
 end
+
+new_state(oas::Oasis, cell::Cell, buf::Vector{UInt8}) = ParserState(oas, cell, buf, 1, ModalVariables())
+new_state(oas::LazyOasis, cell::LazyCell, buf::Vector{UInt8}) = LazyParserState(oas, cell, buf, 1, LazyModalVariables())
 
 struct CellHierarchy
-    hierarchy::Dict{UInt64, Vector{UInt64}}
-    root::UInt64
-    
-    function CellHierarchy(h)
-        all_nodes = Set(keys(h))
-        child_nodes = Set(v for children in values(h) for v in children)
-        root = first(setdiff(all_nodes, child_nodes))
-        return new(h, root)
-    end
+    hierarchy::Dict{UInt64, Dict{UInt64, Int64}}
+    roots::Set{UInt64}
 end
 
-CellHierarchy(oas::Oasis) = CellHierarchy(
-    Dict(c.nameNumber => [i.nameNumber for i in c.cells]
-    for c in oas.cells)
-)
+function CellHierarchy(h::Dict{UInt64, Dict{UInt64, Int64}})
+    all_nodes = Set(keys(h))
+    child_nodes = Set(k for children in values(h) for (k, v) in pairs(children) if v > 0)
+    roots = setdiff(all_nodes, child_nodes) # There can be multiple roots
+    return CellHierarchy(h, roots)
+end
 
-CellHierarchy(oas::LazyOasis) = CellHierarchy(oas.hierarchy)
+function CellHierarchy(oas::Oasis)
+    h = Dict{UInt64, Dict{UInt64, Int64}}()
+    for (cell_number, cell) in pairs(oas.cells)
+        if !haskey(h, cell_number)
+            h[cell_number] = Dict()
+        end
+        for placement in cell.placements
+            if haskey(h[cell_number], placement.nameNumber)
+                h[cell_number][placement.nameNumber] += nrep(placement.repetition)
+            else
+                h[cell_number][placement.nameNumber] = nrep(placement.repetition)
+            end
+        end
+    end
+    return CellHierarchy(h)
+end
+
+CellHierarchy(oas::LazyOasis) = CellHierarchy(Dict(k => v.placements for (k, v) in pairs(oas.cells)))
+
+nrep(::Nothing) = 1
+nrep(rep::Vector{Point{2, Int64}}) = length(rep)
+nrep(rep::PointGridRange) = length(rep)
