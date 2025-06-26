@@ -64,14 +64,6 @@ function Base.show(io::IO, oas::LazyOasis)
     show_cells(oas; maxdepth = 2, flat = false, io = io)
 end
 
-#=
-function Base.show(io::IO, cell::Cell)
-    print(io, "Cell $(cell.nameNumber) with the following contents: \n")
-    show_shapes(cell; io = io)
-    show_cells(cell; maxdepth = 2, flat = false, io = io)
-end
-=#
-
 function Base.show(io::IO, placement::CellPlacement)
     print(io, "Placement of cell $(placement.nameNumber) at ($(placement.location[1]), $(placement.location[2]))")
     repetition = !isnothing(placement.repetition)

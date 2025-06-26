@@ -39,4 +39,6 @@ if !isdefined(Base, :get_extension)
     include("../ext/OasisPlots.jl")
 end
 
+const TESTDATA_DIRECTORY = joinpath(@__DIR__, "..", "test", "testdata")
+
 end # module OasisTools

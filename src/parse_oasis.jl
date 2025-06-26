@@ -13,15 +13,14 @@ Read your OASIS file in Julia.
 
 # Example
 
-```julia
-filename = "./test/testdata/circle.oas";
-oas = oasisread(filename)
-```
+```jldoctest
+julia> using OasisTools;
 
-```
+julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
+
+julia> oas = oasisread(filename)
 OASIS file v1.0 with the following cells:
 TOP
-└─ BOTTOM (2×)
 ```
 
 # Open Items
@@ -33,6 +32,7 @@ TOP
 - Properties are currently ignored.
 - Backwards-compatible extensions are not supported. You will get an error if your file contains
   any.
+- Curvilinear features are not yet supported.
 """
 function oasisread(filename::AbstractString; lazy::Bool = false)
     buf = mmap(filename)

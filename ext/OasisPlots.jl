@@ -17,6 +17,11 @@ function OasisTools.plot_shape!(ax::Axis, shape::Shape{<:AbstractGeometry{2, Int
     Makie.poly!(ax, shape.shape)
 end
 
+"""
+    plot_cell(cell)
+
+Plot a cell using Makie.
+"""
 function OasisTools.plot_cell(cell::Cell)
     fig = Figure()
     ax = Axis(fig[1, 1])
