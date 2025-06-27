@@ -26,7 +26,7 @@ function skip_cell(state)
         @inbounds record_type = state.buf[state.pos]
         is_end_of_cell(state, record_type) ? break : state.pos += 1
         # We 'parse' each record within the cell, but this amounts to skipping each record.
-        parse_record(record_type, state, true)
+        read_record(record_type, state, true)
     end
 end
 

@@ -1,4 +1,4 @@
-function parse_start(state)
+function read_start(state)
     version = VersionNumber(read_string(state))
     state.oas.metadata.version = version
     unit = read_real(state)
@@ -12,35 +12,35 @@ function parse_start(state)
     end
 end
 
-function parse_cellname_impl(state)
+function read_cellname_impl(state)
     cellname = read_string(state)
     cellname_number = length(state.oas.references.cellNames)
     reference = NumericReference(cellname, cellname_number)
     push!(state.oas.references.cellNames, reference)
 end
 
-function parse_cellname_ref(state)
+function read_cellname_ref(state)
     cellname = read_string(state)
     cellname_number = rui(state)
     reference = NumericReference(cellname, cellname_number)
     push!(state.oas.references.cellNames, reference)
 end
 
-function parse_textstring_impl(state)
+function read_textstring_impl(state)
     textstring = read_string(state)
     textstring_number = length(state.oas.references.textStrings)
     reference = NumericReference(textstring, textstring_number)
     push!(state.oas.references.textStrings, reference)
 end
 
-function parse_textstring_ref(state)
+function read_textstring_ref(state)
     textstring = read_string(state)
     textstring_number = rui(state)
     reference = NumericReference(textstring, textstring_number)
     push!(state.oas.references.textStrings, reference)
 end
 
-function parse_layername(state)
+function read_layername(state)
     layername = read_string(state)
     layer_interval = read_interval(state)
     datatype_interval = read_interval(state)
@@ -48,7 +48,7 @@ function parse_layername(state)
     push!(state.oas.references.layerNames, layer_reference)
 end
 
-function parse_textlayername(state)
+function read_textlayername(state)
     layername = read_string(state)
     layer_interval = read_interval(state)
     datatype_interval = read_interval(state)
@@ -56,7 +56,7 @@ function parse_textlayername(state)
     push!(state.oas.references.textLayerNames, layer_reference)
 end
 
-function parse_cell(state)
+function read_cell(state)
     # Whenever a cell is encountered, the following modal variables are reset.
     state.mod.xyAbsolute = true
     state.mod.placementX = 0
@@ -72,38 +72,38 @@ function parse_cell(state)
         # also needs to read a byte to find the next record.
         @inbounds record_type = state.buf[state.pos]
         is_end_of_cell(state, record_type) ? break : state.pos += 1
-        parse_record(record_type, state, true)
+        read_record(record_type, state, true)
     end
 end
 
-function parse_cell_ref(state)
+function read_cell_ref(state)
     cellname_number = rui(state)
     cell = Cell([], [])
     state.currentCell = cell
 
-    parse_cell(state)
+    read_cell(state)
     state.oas.cells[cellname_number] = state.currentCell
 end
 
-function parse_cell_str(state)
+function read_cell_str(state)
     cellname_string = read_string(state)
     cellname_number = _cellname_to_cellname_number(state, cellname_string)
     cell = Cell([], [])
     state.currentCell = cell
 
-    parse_cell(state)
+    read_cell(state)
     state.oas.cells[cellname_number] = state.currentCell
 end
 
-function parse_xyabsolute(state)
+function read_xyabsolute(state)
     state.mod.xyAbsolute = true
 end
 
-function parse_xyrelative(state)
+function read_xyrelative(state)
     state.mod.xyAbsolute = false
 end
 
-function parse_placement(state)
+function read_placement(state)
     info_byte = read_byte(state)
     cellname_explicit = bit_is_nonzero(info_byte, 1)
     if cellname_explicit
@@ -129,7 +129,7 @@ function parse_placement(state)
     push!(state.currentCell.placements, placement)
 end
 
-function parse_placement_mag_angle(state)
+function read_placement_mag_angle(state)
     info_byte = read_byte(state)
     cellname_explicit = bit_is_nonzero(info_byte, 1)
     if cellname_explicit
@@ -166,7 +166,7 @@ function parse_placement_mag_angle(state)
     push!(state.currentCell.placements, placement)
 end
 
-function parse_text(state)
+function read_text(state)
     info_byte = read_byte(state)
     text_explicit = bit_is_nonzero(info_byte, 2)
     if text_explicit
@@ -195,7 +195,7 @@ function parse_text(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_rectangle(state)
+function read_rectangle(state)
     info_byte = read_byte(state)
     is_square = bit_is_nonzero(info_byte, 1)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
@@ -219,7 +219,7 @@ function parse_rectangle(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_polygon(state)
+function read_polygon(state)
     info_byte = read_byte(state)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
     datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
@@ -234,7 +234,7 @@ function parse_polygon(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_path(state)
+function read_path(state)
     info_byte = read_byte(state)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
     datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
@@ -303,7 +303,7 @@ function parse_path(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_trapezoid(state, delta_a_explicit::Bool, delta_b_explicit::Bool)
+function read_trapezoid(state, delta_a_explicit::Bool, delta_b_explicit::Bool)
     info_byte = read_byte(state)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
     datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
@@ -452,7 +452,7 @@ function ctrapezoid_vertices(w::UInt64, h::UInt64, ctrapezoid_type::UInt64)
     ctrapezoid_type == 0x00000019 && return ctrapezoid_vertices_25(w, h)
 end
 
-function parse_ctrapezoid(state)
+function read_ctrapezoid(state)
     info_byte = read_byte(state)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
     datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
@@ -475,7 +475,7 @@ function parse_ctrapezoid(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_circle(state)
+function read_circle(state)
     info_byte = read_byte(state)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
     datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
@@ -489,7 +489,7 @@ function parse_circle(state)
     push!(state.currentCell.shapes, shape)
 end
 
-function parse_cblock(state, in_cell::Bool)
+function read_cblock(state, in_cell::Bool)
     comp_type = rui(state)
     @assert comp_type == 0x00 "Unknown compression type encountered"
     uncomp_byte_count = rui(state)
@@ -504,50 +504,50 @@ function parse_cblock(state, in_cell::Bool)
     state_decomp = new_state(state.oas, state.currentCell, buf_decompress)
     while state_decomp.pos <= uncomp_byte_count
         record_type = read_byte(state_decomp)
-        parse_record(record_type, state_decomp, in_cell)
+        read_record(record_type, state_decomp, in_cell)
     end
 end
 
-function parse_record(record_type::UInt8, state::ParserState, in_cell::Bool)
+function read_record(record_type::UInt8, state::ParserState, in_cell::Bool)
     # Switch statements have been shuffled corresponding to how common each record type is.
     if in_cell
-        record_type == 17 && return parse_placement(state) # PLACEMENT
-        record_type == 20 && return parse_rectangle(state) # RECTANGLE
-        record_type == 21 && return parse_polygon(state) # POLYGON
-        record_type == 18 && return parse_placement_mag_angle(state) # PLACEMENT
-        record_type == 22 && return parse_path(state) # PATH
-        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
-        record_type == 15 && return parse_xyabsolute(state) # XYABSOLUTE
-        record_type == 16 && return parse_xyrelative(state) # XYRELATIVE
-        record_type == 19 && return parse_text(state) # TEXT
+        record_type == 17 && return read_placement(state) # PLACEMENT
+        record_type == 20 && return read_rectangle(state) # RECTANGLE
+        record_type == 21 && return read_polygon(state) # POLYGON
+        record_type == 18 && return read_placement_mag_angle(state) # PLACEMENT
+        record_type == 22 && return read_path(state) # PATH
+        record_type == 34 && return read_cblock(state, in_cell) # CBLOCK
+        record_type == 15 && return read_xyabsolute(state) # XYABSOLUTE
+        record_type == 16 && return read_xyrelative(state) # XYRELATIVE
+        record_type == 19 && return read_text(state) # TEXT
         record_type == 28 && return skip_property(state) # PROPERTY
         record_type == 29 && return skip_record(state) # PROPERTY
-        record_type == 23 && return parse_trapezoid(state, true, true) # TRAPEZOID
-        record_type == 24 && return parse_trapezoid(state, true, false) # TRAPEZOID
-        record_type == 25 && return parse_trapezoid(state, false, true) # TRAPEZOID
-        record_type == 26 && return parse_ctrapezoid(state) # CTRAPEZOID
-        record_type == 27 && return parse_circle(state) # CIRCLE
+        record_type == 23 && return read_trapezoid(state, true, true) # TRAPEZOID
+        record_type == 24 && return read_trapezoid(state, true, false) # TRAPEZOID
+        record_type == 25 && return read_trapezoid(state, false, true) # TRAPEZOID
+        record_type == 26 && return read_ctrapezoid(state) # CTRAPEZOID
+        record_type == 27 && return read_circle(state) # CIRCLE
         record_type == 0  && return skip_record(state) # PAD
         record_type == 32 && error("XELEMENT record encountered; not implemented yet") # XELEMENT
         record_type == 33 && error("XGEOMETRY record encountered; not implemented yet") # XGEOMETRY
     else
-        record_type == 4  && return parse_cellname_ref(state) # CELLNAME
-        record_type == 13 && return parse_cell_ref(state) # CELL
-        record_type == 11 && return parse_layername(state) # LAYERNAME
-        record_type == 12 && return parse_textlayername(state) # LAYERNAME
-        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
-        record_type == 3  && return parse_cellname_impl(state) # CELLNAME
-        record_type == 5  && return parse_textstring_impl(state) # TEXTSTRING
-        record_type == 6  && return parse_textstring_ref(state) # TEXTSTRING
+        record_type == 4  && return read_cellname_ref(state) # CELLNAME
+        record_type == 13 && return read_cell_ref(state) # CELL
+        record_type == 11 && return read_layername(state) # LAYERNAME
+        record_type == 12 && return read_textlayername(state) # LAYERNAME
+        record_type == 34 && return read_cblock(state, in_cell) # CBLOCK
+        record_type == 3  && return read_cellname_impl(state) # CELLNAME
+        record_type == 5  && return read_textstring_impl(state) # TEXTSTRING
+        record_type == 6  && return read_textstring_ref(state) # TEXTSTRING
         record_type == 7  && return skip_propname_impl(state) # PROPNAME
         record_type == 8  && return skip_propname_ref(state) # PROPNAME
         record_type == 9  && return skip_propstring_impl(state) # PROPSTRING
         record_type == 10 && return skip_propstring_ref(state) # PROPSTRING
-        record_type == 14 && return parse_cell_str(state) # CELL
+        record_type == 14 && return read_cell_str(state) # CELL
         record_type == 28 && return skip_property(state) # PROPERTY
         record_type == 29 && return skip_record(state) # PROPERTY
         record_type == 0  && return skip_record(state) # PAD
-        record_type == 1  && return parse_start(state) # START
+        record_type == 1  && return read_start(state) # START
         record_type == 2  && return skip_record(state) # END
         record_type == 30 && error("XNAME record encountered; not implemented yet") # XNAME
         record_type == 31 && error("XNAME record encountered; not implemented yet") # XNAME
@@ -555,7 +555,7 @@ function parse_record(record_type::UInt8, state::ParserState, in_cell::Bool)
     error("No suitable record type found; file may be corrupted")
 end
 
-function parse_record(record_type::UInt8, state::LazyParserState, in_cell::Bool)
+function read_record(record_type::UInt8, state::LazyParserState, in_cell::Bool)
     # Switch statements have been shuffled corresponding to how common each record type is.
     if in_cell
         record_type == 17 && return skip_placement(state) # PLACEMENT
@@ -563,7 +563,7 @@ function parse_record(record_type::UInt8, state::LazyParserState, in_cell::Bool)
         record_type == 21 && return skip_polygon(state) # POLYGON
         record_type == 18 && return skip_placement_mag_angle(state) # PLACEMENT
         record_type == 22 && return skip_path(state) # PATH
-        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
+        record_type == 34 && return read_cblock(state, in_cell) # CBLOCK
         record_type == 15 && return skip_record(state) # XYABSOLUTE
         record_type == 16 && return skip_record(state) # XYRELATIVE
         record_type == 19 && return skip_text(state) # TEXT
@@ -578,14 +578,14 @@ function parse_record(record_type::UInt8, state::LazyParserState, in_cell::Bool)
         record_type == 32 && error("XELEMENT record encountered; not implemented yet") # XELEMENT
         record_type == 33 && error("XGEOMETRY record encountered; not implemented yet") # XGEOMETRY
     else
-        record_type == 4  && return parse_cellname_ref(state) # CELLNAME
+        record_type == 4  && return read_cellname_ref(state) # CELLNAME
         record_type == 13 && return skip_cell_ref(state) # CELL
-        record_type == 11 && return parse_layername(state) # LAYERNAME
-        record_type == 12 && return parse_textlayername(state) # LAYERNAME
-        record_type == 34 && return parse_cblock(state, in_cell) # CBLOCK
-        record_type == 3  && return parse_cellname_impl(state) # CELLNAME
-        record_type == 5  && return parse_textstring_impl(state) # TEXTSTRING
-        record_type == 6  && return parse_textstring_ref(state) # TEXTSTRING
+        record_type == 11 && return read_layername(state) # LAYERNAME
+        record_type == 12 && return read_textlayername(state) # LAYERNAME
+        record_type == 34 && return read_cblock(state, in_cell) # CBLOCK
+        record_type == 3  && return read_cellname_impl(state) # CELLNAME
+        record_type == 5  && return read_textstring_impl(state) # TEXTSTRING
+        record_type == 6  && return read_textstring_ref(state) # TEXTSTRING
         record_type == 7  && return skip_propname_impl(state) # PROPNAME
         record_type == 8  && return skip_propname_ref(state) # PROPNAME
         record_type == 9  && return skip_propstring_impl(state) # PROPSTRING
@@ -594,7 +594,7 @@ function parse_record(record_type::UInt8, state::LazyParserState, in_cell::Bool)
         record_type == 28 && return skip_property(state) # PROPERTY
         record_type == 29 && return skip_record(state) # PROPERTY
         record_type == 0  && return skip_record(state) # PAD
-        record_type == 1  && return parse_start(state) # START
+        record_type == 1  && return read_start(state) # START
         record_type == 2  && return skip_record(state) # END
         record_type == 30 && error("XNAME record encountered; not implemented yet") # XNAME
         record_type == 31 && error("XNAME record encountered; not implemented yet") # XNAME

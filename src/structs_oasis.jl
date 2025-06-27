@@ -87,7 +87,7 @@ end
 
 Object encoding the placement of a cell in another cell.
 
-# Arguments
+# Properties
 
 - `nameNumber::UInt64`: The cell name number for the cell that is being placed.
 - `location::Point{2, Int64}`: Where the cell will be placed.
@@ -110,7 +110,7 @@ end
 """
     struct Cell(shapes, placements, nameNumber)
 
-# Arguments
+# Properties
 
 - `shapes::Vector{Shape}`: Lists the shapes, such as polygons and lines, that are contained in
   the cell.
@@ -145,7 +145,7 @@ placements(cell::Cell) = cell.placements
 
 Lazy-loaded version of a `Cell`.
 
-# Arguments
+# Properties
 
 - `byte::Int64`: Location in the file that the cell contents can be found.
 - `placements::Dict{UInt64, Int64}`: Unlike in a `Cell`, a `LazyCell` only stores whether
@@ -166,7 +166,7 @@ abstract type AbstractOasis end
 
 Object containing all the data of your OASIS file.
 
-# Arguments
+# Properties
 
 - `cells::Dict{UInt64, Cell}`: The actual contents. All cells, indexed by their name number.
 - `metadata::Metadata`: File version and length unit.
@@ -187,7 +187,7 @@ end
 
 Lazily loaded OASIS file.
 
-# Arguments
+# Properties
 
 - `buf::Vector{UInt8}`: Memory mapped buffer of the OASIS file on your hard drive. This is
   needed because `LazyOasis` looks up data on the fly when you query it for information.
@@ -310,33 +310,6 @@ See also [`cell_name`](@ref).
 """
 cell_number(oas::AbstractOasis, cell_name::AbstractString) = find_reference(cell_name, oas.references.cellNames)
 
-mutable struct ParserState
-    oas::Oasis # Contents of the OASIS file.
-    currentCell::Cell # Current cell we're looking at.
-    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
-    pos::Int64 # Byte position in buffer.
-    mod::ModalVariables # Modal variables according to OASIS spec.
-end
-
-function ParserState(buf::Vector{UInt8})
-    return ParserState(Oasis(), Cell([], []), buf, 1, ModalVariables())
-end
-
-mutable struct LazyParserState
-    oas::LazyOasis # Lazily loaded contents of the OASIS file.
-    currentCell::LazyCell # Current cell we're looking at.
-    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
-    pos::Int64 # Byte position in buffer.
-    mod::LazyModalVariables
-end
-
-function LazyParserState(buf::Vector{UInt8})
-    return LazyParserState(LazyOasis(buf), LazyCell(0, Dict()), buf, 1, LazyModalVariables())
-end
-
-new_state(oas::Oasis, cell::Cell, buf::Vector{UInt8}) = ParserState(oas, cell, buf, 1, ModalVariables())
-new_state(oas::LazyOasis, cell::LazyCell, buf::Vector{UInt8}) = LazyParserState(oas, cell, buf, 1, LazyModalVariables())
-
 struct CellHierarchy
     hierarchy::Dict{UInt64, Dict{UInt64, Int64}}
     roots::Set{UInt64}
@@ -367,7 +340,3 @@ function CellHierarchy(oas::Oasis)
 end
 
 CellHierarchy(oas::LazyOasis) = CellHierarchy(Dict(k => v.placements for (k, v) in pairs(oas.cells)))
-
-nrep(::Nothing) = 1
-nrep(rep::Vector{Point{2, Int64}}) = length(rep)
-nrep(rep::PointGridRange) = length(rep)

@@ -1,5 +1,3 @@
-const MAGIC_BYTES = [0x25, 0x53, 0x45, 0x4d, 0x49, 0x2d, 0x4f, 0x41, 0x53, 0x49, 0x53, 0x0d, 0x0a]
-
 """
     oasisread(filename; kw...)
 
@@ -45,7 +43,7 @@ function oasisread(filename::AbstractString; lazy::Bool = false)
     while true
         record_type = read_byte(state)
         record_type == 0x02 && break # Stop when encountering END record. Ignoring checksum.
-        parse_record(record_type, state, false)
+        read_record(record_type, state, false)
     end
 
     return state.oas
