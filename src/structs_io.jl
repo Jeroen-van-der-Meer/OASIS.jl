@@ -66,12 +66,12 @@ mutable struct WriterState
     # Not decided yet.
     io::IOStream # Where you're saving to.
     buf::Vector{UInt8} # An output buffer of some size, probably big.
-    # Is it worth separately storing buflen? Remember we will call length(buf) for every byte...
-    buflen::Int64 # Length of buffer stored separately.
+    # Is it worth separately storing bufsize? Remember we will call length(buf) for every byte...
+    bufsize::Int64 # Length of buffer stored separately.
     pos::Int64 # Position in buffer.
     mod::ModalVariables
 end
 
-WriterState(filename::AbstractString, buflen::Integer) = WriterState(
-    IOStream(filename), Vector{UInt8}(undef, buflen), buflen, 1, ModalVariables()
+WriterState(filename::AbstractString, bufsize::Integer) = WriterState(
+    open(filename, "w"), Vector{UInt8}(undef, bufsize), bufsize, 1, ModalVariables()
 )
