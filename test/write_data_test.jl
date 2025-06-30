@@ -60,10 +60,13 @@ end
     end
     @testset "Write string" begin
         state = OasisTools.WriterState("temp", 1024 * 1024)
-        OasisTools.write_string(state, "abc")
+        OasisTools.write_bn_string(state, "abc")
         @test read_and_reset(state, 4) == [0x03, 0x61, 0x62, 0x63]
-        OasisTools.write_string(state, "")
+        OasisTools.write_bn_string(state, "")
         @test read_and_reset(state, 1) == [0x00]
-        @test_warn "Non-printable ASCII characters detected. Other software may not be able to read your output file." OasisTools.write_string(state, "↑")
+        @test_logs (
+            :warn,
+            "Non-printable ASCII characters detected. Other software may not be able to read your output file."
+        ) OasisTools.write_bn_string(state, "↑")
     end
 end

@@ -52,7 +52,17 @@ function write_real(state, real::Real)
     end
 end
 
-function write_string(state, string::AbstractString)
+function write_a_string(state, string::AbstractString) # a-string
+    bytes = codeunits(string)
+    nbytes = length(bytes)
+    if !all(0x20 .<= bytes .<= 0x7e)
+        @warn "Non-printable ASCII characters detected. Other software may not be able to read your output file."
+    end
+    wui(state, nbytes)
+    write_bytes(state, bytes, nbytes)
+end
+
+function write_bn_string(state, string::AbstractString) # b-string and n-string
     bytes = codeunits(string)
     nbytes = length(bytes)
     if !all(0x21 .<= bytes .<= 0x7e)
@@ -60,6 +70,32 @@ function write_string(state, string::AbstractString)
     end
     wui(state, nbytes)
     write_bytes(state, bytes, nbytes)
+end
+
+function write_interval_type_3(state, interval)
+    write_byte(state, 3)
+    write_byte(state, interval.low)
+end
+
+function write_interval_type_2(state, interval)
+    write_byte(state, 2)
+    write_byte(state, interval.low)
+end
+
+function write_interval_type_4(state, interval)
+    write_byte(state, 4)
+    write_byte(state, interval.low)
+    write_byte(state, interval.high)
+end
+
+function write_interval(state, interval::Interval)
+    if interval.low == interval.high
+        write_interval_type_3(state, interval)
+    elseif interval.high == typemax(UInt64)
+        write_interval_type_2(state, interval)
+    else
+        write_interval_type_4(state, interval)
+    end
 end
 
 function write_bytes(state, bytes::AbstractVector{UInt8}, nbytes::Integer = length(bytes))
@@ -91,6 +127,8 @@ function write_bytes(state, uint::UInt64)
         write_byte(state, b)
     end
 end
+
+write_byte(state, byte::Integer) = write_byte(state, UInt8(byte))
 
 function write_byte(state, byte::UInt8)
     @inbounds state.buf[state.pos] = byte
