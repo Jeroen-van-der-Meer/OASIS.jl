@@ -18,7 +18,7 @@ Obtain an overview of the cells in your OASIS objects.
   argument `maxdepth` is ignored.
 """
 function show_cells(
-    oas::AbstractOasis,
+    oas::Oasis,
     cell_string::AbstractString = "";
     maxdepth = 100,
     flat = false,
@@ -57,13 +57,6 @@ function Base.show(io::IO, oas::Oasis)
     show_cells(oas; maxdepth = 2, flat = false, io = io)
 end
 
-function Base.show(io::IO, oas::LazyOasis)
-    print(io,
-        "Lazy OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ",
-        "with the following cells:\n")
-    show_cells(oas; maxdepth = 2, flat = false, io = io)
-end
-
 function Base.show(io::IO, placement::CellPlacement)
     print(io, "Placement of cell $(placement.nameNumber) at ($(placement.location[1]), $(placement.location[2]))")
     repetition = !isnothing(placement.repetition)
@@ -96,7 +89,7 @@ end
 # Internal functions
 
 function _show_hierarchy(
-    oas::AbstractOasis;
+    oas::Oasis;
     cell_hierarchy = CellHierarchy(oas),
     maxdepth = 100, io = stdout, count = 1,
     current_depth = 0, prefix = "", last = true, roots = cell_hierarchy.roots

@@ -57,7 +57,6 @@ Base.@kwdef struct References
     textStrings::Vector{NumericReference} = []
     layerNames::Vector{LayerReference} = []
     textLayerNames::Vector{LayerReference} = []
-    cells::Vector{NumericReference} = []
 end
 
 Base.@kwdef mutable struct Metadata
@@ -115,8 +114,6 @@ end
 - `shapes::Vector{Shape}`: Lists the shapes, such as polygons and lines, that are contained in
   the cell.
 - `placements::Vector{CellPlacement}`: Lists all other cells that are placed in this cell.
-- `nameNumber::UInt64`: The number corresponding to the name of the cell. You can find the
-  corresponding string in the `references` field of your `Oasis` object.
 
 See also [`LazyCell`](@ref).
 """
@@ -147,19 +144,19 @@ Lazy-loaded version of a `Cell`.
 
 # Properties
 
-- `byte::Int64`: Location in the file that the cell contents can be found.
+- `byteStart::Int64`: Location of first byte of corresponding CELL record. 
+- `byteEnd::Int64`: Location of first byte of corresponding CELL record. 
 - `placements::Dict{UInt64, Int64}`: Unlike in a `Cell`, a `LazyCell` only stores whether
   or not other cells are placed within it, and if so, how often. No further information about
   e.g. the location of said placements is stored into memory.
 
-See also [`Cell`](@ref).
+See also [`Cell`](@ref), [`load_cell!`](@ref).
 """
 struct LazyCell
-    byte::Int64
-    placements::Dict{UInt64, Int64} # Indicates how often other cells are placed in this one.
+    byteStart::Int64
+    byteEnd::Int64
+    placements::Dict{UInt64, Int64}
 end
-
-abstract type AbstractOasis end
 
 """
     struct Oasis(cells, metadata, references)
@@ -168,51 +165,26 @@ Object containing all the data of your OASIS file.
 
 # Properties
 
-- `cells::Dict{UInt64, Cell}`: The actual contents. All cells, indexed by their name number.
+- `buf::Vector{UInt8}`: Memory mapped buffer of the OASIS file on your hard drive.
+- `cells::Dict{UInt64, Union{Cell, LazyCell}}`: The actual contents. All cells, indexed by
+  their name number. The cells can either be `Cell` objects or lazy-loaded `LazyCell` objects.
 - `metadata::Metadata`: File version and length unit.
 - `references::References`: To save on storage space, in an OASIS file, names of cells, layers,
   etc. are stored only once and are then referenced with a number. We mirror this behaviour in
   `OasisTools.jl`.
-
-See also [`LazyOasis`](@ref).
 """
-Base.@kwdef struct Oasis <: AbstractOasis
-    cells::Dict{UInt64, Cell} = Dict()
-    metadata::Metadata = Metadata()
-    references::References = References()
-end
-
-"""
-    struct LazyOasis(buf, cells, metadata, references)
-
-Lazily loaded OASIS file.
-
-# Properties
-
-- `buf::Vector{UInt8}`: Memory mapped buffer of the OASIS file on your hard drive. This is
-  needed because `LazyOasis` looks up data on the fly when you query it for information.
-- `cells::Dict{UInt64, LazyCell}`: The actual contents. All cells, indexed by their name number.
-  Unlike in an `Oasis` object, `LazyOasis` only stores `LazyCell`s, which only stores at what
-  byte to find the cell, and what other cells are contained in it. 
-- `metadata::Metadata`: File version and length unit.
-- `references::References`: To save on storage space, in an OASIS file, names of cells, layers,
-  etc. are stored only once and are then referenced with a number. We mirror this behaviour in
-  `OasisTools.jl`.
-
-See also [`Oasis`](@ref).
-"""
-struct LazyOasis <: AbstractOasis
-    buf::Vector{UInt8} # Mmapped buffer of OASIS file.
-    cells::Dict{UInt64, LazyCell}
+struct Oasis
+    buf::Vector{UInt8}
+    cells::Dict{UInt64, Union{Cell, LazyCell}}
     metadata::Metadata
     references::References
 end
 
-function LazyOasis(buf::Vector{UInt8})
-    return LazyOasis(buf, Dict(), Metadata(), References())
+function Oasis(buf::AbstractVector{UInt8})
+    return Oasis(buf, Dict(), Metadata(), References())
 end
 
-function Base.getindex(oas::AbstractOasis, cell_name::String)
+function Base.getindex(oas::Oasis, cell_name::String)
     return getindex(cells(oas), cell_number(oas, cell_name))
 end
 
@@ -236,7 +208,7 @@ Dict{UInt64, Cell} with 1 entry:
   0x0000000000000000 => Cell(Shape[Polygon in layer (1/0) at (-500, 0)], CellPl…
 ```
 """
-cells(oas::AbstractOasis) = oas.cells
+cells(oas::Oasis) = oas.cells
 
 """
     cell_names(oas)
@@ -258,7 +230,7 @@ julia> cell_names(oas)
  "BOTTOM"
 ```
 """
-cell_names(oas::AbstractOasis) = [c.name for c in oas.references.cellNames]
+cell_names(oas::Oasis) = [c.name for c in oas.references.cellNames]
 
 """
     cell_name(oas, cell_number)
@@ -283,7 +255,7 @@ true
 
 See also [`cell_number`](@ref).
 """
-cell_name(oas::AbstractOasis, cell_number::Integer) = find_reference(cell_number, oas.references.cellNames)
+cell_name(oas::Oasis, cell_number::Integer) = find_reference(cell_number, oas.references.cellNames)
 
 """
     cell_number(oas, cell_name)
@@ -308,7 +280,46 @@ true
 
 See also [`cell_name`](@ref).
 """
-cell_number(oas::AbstractOasis, cell_name::AbstractString) = find_reference(cell_name, oas.references.cellNames)
+cell_number(oas::Oasis, cell_name::AbstractString) = find_reference(cell_name, oas.references.cellNames)
+
+"""
+    load_cell!(oas, cell_name)
+
+Load a cell into memory. Use this function to convert individual `LazyCell`s into `Cell`s.
+
+# Example
+
+```jldoctest
+julia> using OasisTools;
+
+julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "nested.oas");
+
+julia> oas["BOTTOM"]
+LazyCell(173, 180, Dict{UInt64, Int64}())
+
+julia> load_cell!(oas, "BOTTOM");
+
+julia> oas["BOTTOM"]
+Cell(Shape[Polygon in layer (1/0) at (0, 0)], CellPlacement[])
+```
+"""
+function load_cell!(oas::Oasis, cell_name::AbstractString)
+    name_number = cell_number(oas, cell_name)
+    lazy_cell = oas.cells[name_number]
+    load_cell!(oas, name_number, lazy_cell)
+end
+
+load_cell!(::Oasis, ::UInt64, ::Cell) = return
+
+function load_cell!(oas::Oasis, cell_number::UInt64, lazy_cell::LazyCell)
+    state = CellParserState([], [], oas.buf, lazy_cell.byteStart, ModalVariables(), oas.references)
+    while state.pos <= lazy_cell.byteEnd
+        record_type = read_byte(state)
+        read_record(record_type, state)
+    end
+    cell = Cell(state.shapes, state.placements)
+    oas.cells[cell_number] = cell
+end
 
 struct CellHierarchy
     hierarchy::Dict{UInt64, Dict{UInt64, Int64}}
@@ -325,18 +336,24 @@ end
 function CellHierarchy(oas::Oasis)
     h = Dict{UInt64, Dict{UInt64, Int64}}()
     for (cell_number, cell) in pairs(oas.cells)
-        if !haskey(h, cell_number)
-            h[cell_number] = Dict()
-        end
-        for placement in cell.placements
-            if haskey(h[cell_number], placement.nameNumber)
-                h[cell_number][placement.nameNumber] += nrep(placement.repetition)
-            else
-                h[cell_number][placement.nameNumber] = nrep(placement.repetition)
-            end
-        end
+        h[cell_number] = CellHierarchy(cell)
     end
     return CellHierarchy(h)
 end
 
-CellHierarchy(oas::LazyOasis) = CellHierarchy(Dict(k => v.placements for (k, v) in pairs(oas.cells)))
+function CellHierarchy(cell::Cell)
+    counts = Dict{UInt64, Int64}()
+    for placement in cell.placements
+        n = placement.nameNumber
+        if haskey(counts, n)
+            counts[n] += nrep(placement.repetition)
+        else
+            counts[n] = nrep(placement.repetition)
+        end
+    end
+    return counts
+end
+
+function CellHierarchy(cell::LazyCell)
+    return cell.placements
+end

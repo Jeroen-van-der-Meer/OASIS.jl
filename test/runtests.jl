@@ -1,7 +1,7 @@
 using GeometryBasics
 using Makie
 using OasisTools
-import OasisTools: ParserState
+import OasisTools: ParserState, CellParserState
 import Suppressor
 using Test
 

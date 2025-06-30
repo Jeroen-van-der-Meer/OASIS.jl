@@ -77,13 +77,13 @@ end
 # PLACEMENT records can either use CELLNAME references or strings to refer to what cell is being
 # placed. For consistency, we wish to always log a reference number. However, there is no
 # guarantee that such reference exists, so we'll have to manually create it.
-function _cellname_to_cellname_number(state, cellname::String)
-    cellname_number = find_reference(cellname, state.oas.references.cellNames)
-    if isnothing(cellname_number)
-        cellname_number = rand(UInt64)
-        push!(state.oas.references.cellNames, NumericReference(cellname, cellname_number))
+function _find_or_make_reference(references::AbstractVector{NumericReference}, name::String)
+    number = find_reference(name, references)
+    if isnothing(number)
+        number = rand(UInt64)
+        push!(references, NumericReference(name, number))
     end
-    return cellname_number
+    return number
 end
 
 function is_end_of_cell(state, next_record::UInt8)
@@ -94,10 +94,11 @@ function is_end_of_cell(state, next_record::UInt8)
     elseif next_record == 34
         # If a CBLOCK is encountered, the first record within the CBLOCK implies whether or
         # not the CBLOCK belongs to the cell or not.
-        comp_type = state.buf[state.pos + 1]
+        comp_type = read_byte(state)
         @assert comp_type == 0x00 "Unknown compression type encountered"
-        comp_byte_count = state.buf[state.pos + 3]
-        comp_bytes = @view state.buf[(state.pos + 4):(state.pos + 4 + comp_byte_count - 1)]
+        skip_integer(state) # uncomp_byte_count
+        comp_byte_count = rui(state)
+        comp_bytes = @view state.buf[state.pos:(state.pos + comp_byte_count - 1)]
         z = DeflateDecompressorStream(IOBuffer(comp_bytes))
         first_record_in_cblock = read(z, UInt8)
         return is_end_of_cell(state, first_record_in_cblock)

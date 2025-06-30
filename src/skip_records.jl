@@ -1,55 +1,24 @@
-skip_record(state) = return
+skip_record(state::AbstractParserState) = return
 
-function skip_propname_impl(state)
+function skip_propname_impl(state::ParserState)
     skip_string(state)
 end
 
-function skip_propname_ref(state)
-    skip_string(state)
-    skip_integer(state)
-end
-
-function skip_propstring_impl(state)
-    skip_string(state)
-end
-
-function skip_propstring_ref(state)
+function skip_propname_ref(state::ParserState)
     skip_string(state)
     skip_integer(state)
 end
 
-function skip_cell(state)
-    while true
-        # The reason we look ahead one byte is because we cannot tell in advance when the CELL
-        # record ends. If it ends, this function will likely return to the main parser which
-        # also needs to read a byte to find the next record.
-        @inbounds record_type = state.buf[state.pos]
-        is_end_of_cell(state, record_type) ? break : state.pos += 1
-        # We 'parse' each record within the cell, but this amounts to skipping each record.
-        read_record(record_type, state, true)
-    end
+function skip_propstring_impl(state::ParserState)
+    skip_string(state)
 end
 
-function skip_cell_ref(state)
-    cellname_number = rui(state)
-    cell = LazyCell(state.pos, Dict())
-    state.currentCell = cell
-
-    skip_cell(state)
-    state.oas.cells[cellname_number] = state.currentCell
+function skip_propstring_ref(state::ParserState)
+    skip_string(state)
+    skip_integer(state)
 end
 
-function skip_cell_str(state)
-    cellname_string = read_string(state)
-    cellname_number = _cellname_to_cellname_number(state, cellname_string)
-    cell = LazyCell(state.pos, Dict())
-    state.currentCell = cell
-
-    skip_cell(state)
-    state.oas.cells[cellname_number] = state.currentCell
-end
-
-function skip_placement(state)
+function skip_placement(state::LazyCellParserState)
     info_byte = read_byte(state)
     cellname_explicit = bit_is_nonzero(info_byte, 1)
     if cellname_explicit
@@ -58,7 +27,7 @@ function skip_placement(state)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = _cellname_to_cellname_number(state, cellname)
+            cellname_number = _find_or_make_reference(state.oas.references.cellNames, cellname)
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
@@ -69,14 +38,14 @@ function skip_placement(state)
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
     nrep = read_nrep(state, info_byte, 5)
-    if haskey(state.currentCell.placements, cellname_number)
-        state.currentCell.placements[cellname_number] += nrep
+    if haskey(state.placements, cellname_number)
+        state.placements[cellname_number] += nrep
     else
-        state.currentCell.placements[cellname_number] = nrep
+        state.placements[cellname_number] = nrep
     end
 end
 
-function skip_placement_mag_angle(state)
+function skip_placement_mag_angle(state::LazyCellParserState)
     info_byte = read_byte(state)
     cellname_explicit = bit_is_nonzero(info_byte, 1)
     if cellname_explicit
@@ -85,7 +54,7 @@ function skip_placement_mag_angle(state)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = _cellname_to_cellname_number(state, cellname)
+            cellname_number = _find_or_make_reference(state.oas.references.cellNames, cellname)
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
@@ -98,14 +67,14 @@ function skip_placement_mag_angle(state)
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
     nrep = read_nrep(state, info_byte, 5)
-    if haskey(state.currentCell.placements, cellname_number)
-        state.currentCell.placements[cellname_number] += nrep
+    if haskey(state.placements, cellname_number)
+        state.placements[cellname_number] += nrep
     else
-        state.currentCell.placements[cellname_number] = nrep
+        state.placements[cellname_number] = nrep
     end
 end
 
-function skip_text(state)
+function skip_text(state::LazyCellParserState)
     info_byte = read_byte(state)
     if bit_is_nonzero(info_byte, 2)
         if bit_is_nonzero(info_byte, 3)
@@ -121,7 +90,7 @@ function skip_text(state)
     bit_is_nonzero(info_byte, 6) && skip_repetition(state)
 end
 
-function skip_rectangle(state)
+function skip_rectangle(state::LazyCellParserState)
     info_byte = read_byte(state)
     bit_is_nonzero(info_byte, 8) && skip_integer(state)
     bit_is_nonzero(info_byte, 7) && skip_integer(state)
@@ -132,7 +101,7 @@ function skip_rectangle(state)
     bit_is_nonzero(info_byte, 6) && skip_repetition(state)
 end
 
-function skip_polygon(state)
+function skip_polygon(state::LazyCellParserState)
     info_byte = read_byte(state)
     bit_is_nonzero(info_byte, 8) && skip_integer(state)
     bit_is_nonzero(info_byte, 7) && skip_integer(state)
@@ -142,7 +111,7 @@ function skip_polygon(state)
     bit_is_nonzero(info_byte, 6) && skip_repetition(state)
 end
 
-function skip_path(state)
+function skip_path(state::LazyCellParserState)
     info_byte = read_byte(state)
     bit_is_nonzero(info_byte, 8) && skip_integer(state)
     bit_is_nonzero(info_byte, 7) && skip_integer(state)
@@ -162,7 +131,7 @@ function skip_path(state)
     bit_is_nonzero(info_byte, 6) && skip_repetition(state)
 end
 
-function skip_trapezoid(state, delta_a_explicit::Bool, delta_b_explicit::Bool)
+function skip_trapezoid(state::LazyCellParserState, delta_a_explicit::Bool, delta_b_explicit::Bool)
     info_byte = read_byte(state)
     bit_is_nonzero(info_byte, 8) && skip_integer(state)
     bit_is_nonzero(info_byte, 7) && skip_integer(state)
@@ -175,7 +144,7 @@ function skip_trapezoid(state, delta_a_explicit::Bool, delta_b_explicit::Bool)
     bit_is_nonzero(info_byte, 6) && skip_repetition(state)
 end
 
-function skip_ctrapezoid(state)
+function skip_ctrapezoid(state::LazyCellParserState)
     info_byte = read_byte(state)
     bit_is_nonzero(info_byte, 8) && skip_integer(state)
     bit_is_nonzero(info_byte, 7) && skip_integer(state)
@@ -187,7 +156,7 @@ function skip_ctrapezoid(state)
     bit_is_nonzero(info_byte, 6) && skip_repetition(state)
 end
 
-function skip_circle(state)
+function skip_circle(state::LazyCellParserState)
     info_byte = read_byte(state)
     bit_is_nonzero(info_byte, 8) && skip_integer(state)
     bit_is_nonzero(info_byte, 7) && skip_integer(state)
@@ -197,7 +166,7 @@ function skip_circle(state)
     bit_is_nonzero(info_byte, 6) && skip_integer(state)
 end
 
-function skip_property(state)
+function skip_property(state::AbstractParserState)
     info_byte = read_byte(state)
     if bit_is_nonzero(info_byte, 6)
         if bit_is_nonzero(info_byte, 7)
@@ -215,11 +184,4 @@ function skip_property(state)
             skip_property_value(state)
         end
     end
-end
-
-function skip_cblock(state)
-    skip_integer(state)
-    skip_integer(state)
-    comp_byte_count = rui(state)
-    skip_bytes(state, comp_byte_count)
 end

@@ -152,7 +152,7 @@ read_repetition_type_9(state) = PointGridRange((0, 0), rui(state) + 2, 1, read_g
 read_repetition_type_10(state) = collect_repetitions_g(state, rui(state) + 2)
 read_repetition_type_11(state) = collect_repetitions_g(state, rui(state) + 2; grid = signed(rui(state)))
 
-function read_repetition(state)
+function read_repetition(state::CellParserState)
     type = read_byte(state)
     # Ordering is changed based on what appears to be used most often in practice.
     type == 0  && return read_repetition_type_0(state)
@@ -171,7 +171,12 @@ function read_repetition(state)
 end
 
 read_nrep_type_0(state) = state.mod.nrep
-read_nrep_type_1(state) = (rui(state) + 2) * (rui(state) + 2)
+function read_nrep_type_1(state)
+    nrep = (rui(state) + 2) * (rui(state) + 2)
+    skip_integer(state)
+    skip_integer(state)
+    return nrep
+end
 function read_nrep_type_2(state)
     nrep = rui(state) + 2
     skip_integer(state)

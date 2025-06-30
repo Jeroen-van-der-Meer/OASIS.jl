@@ -124,17 +124,6 @@
         filename = "nested.oas" # 161.300 μs (232 allocations: 225.47 KiB)
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath)
-        s = Suppressor.@capture_out show_cells(oas)
-        @test s == """
-TOP
-├─ BOTTOM2 (4×)
-│  └─ ROCKBOTTOM
-├─ MIDDLE2
-│  └─ BOTTOM (5×)
-└─ MIDDLE (3×)
-   ├─ BOTTOM2 (4×)
-   │  └─ ROCKBOTTOM
-   └─ BOTTOM (2×)"""
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
 OASIS file v1.0 with the following cells:
@@ -258,60 +247,87 @@ end
         filename = "polygon.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
-        @test cells(oas) isa Dict{UInt64, LazyCell}
+        @test oas isa Oasis
         cell = oas["TOP"]
         @test cell isa LazyCell
-        @test cell.byte == 160
+        @test cell.byteStart == 160
         @test cell.placements == Dict{UInt64, Int64}()
+        load_cell!(oas, "TOP")
+        cell = oas["TOP"]
+        @test cell isa Cell
     end
     @testset "Boxes" begin
         filename = "boxes.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
+        @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-Lazy OASIS file v1.0 with the following cells:
+OASIS file v1.0 with the following cells:
 TOP
 └─ BOTTOM (31×)"""
         top_cell = oas["TOP"]
-        @test top_cell.byte == 161
+        @test top_cell.byteStart == 161
         bottom_cell = oas["BOTTOM"]
-        @test bottom_cell.byte == 150
+        @test bottom_cell.byteStart == 150
     end
     @testset "Circle" begin
         filename = "circle.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
+        @test oas isa Oasis
     end
     @testset "Paths" begin
         filename = "paths.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
+        @test oas isa Oasis
     end
     @testset "Nested" begin
         filename = "nested.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
+        @test oas isa Oasis
+        s = Suppressor.@capture_out show_cells(oas)
+        @test s == """
+TOP
+├─ BOTTOM2 (4×)
+│  └─ ROCKBOTTOM
+├─ MIDDLE2
+│  └─ BOTTOM (5×)
+└─ MIDDLE (3×)
+   ├─ BOTTOM2 (4×)
+   │  └─ ROCKBOTTOM
+   └─ BOTTOM (2×)"""
+        load_cell!(oas, "BOTTOM")
+        @test oas["BOTTOM"] isa Cell
+        @test length(oas["BOTTOM"].shapes) == 1
+        s = Suppressor.@capture_out show_cells(oas)
+        @test s == """
+TOP
+├─ BOTTOM2 (4×)
+│  └─ ROCKBOTTOM
+├─ MIDDLE2
+│  └─ BOTTOM (5×)
+└─ MIDDLE (3×)
+   ├─ BOTTOM2 (4×)
+   │  └─ ROCKBOTTOM
+   └─ BOTTOM (2×)"""
     end
     @testset "Trapezoids" begin
         filename = "trapezoids.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
+        @test oas isa Oasis
     end
     @testset "Two top cells" begin
         filename = "topcells.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
+        @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-Lazy OASIS file v1.0 with the following cells:
+OASIS file v1.0 with the following cells:
 TOP
 OTHERTOP"""
         @test oas["TOP"] isa LazyCell
@@ -321,6 +337,6 @@ OTHERTOP"""
         filename = "flipped.oas"
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
-        @test oas isa LazyOasis
+        @test oas isa Oasis
     end
 end

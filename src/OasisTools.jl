@@ -11,7 +11,7 @@ export cell_number
 export CellPlacement
 export cells
 export LazyCell
-export LazyOasis
+export load_cell!
 export Oasis
 export oasisread
 export placements
@@ -42,6 +42,8 @@ include("skip_records.jl")
 
 # Writing
 include("write_data.jl")
+include("write_records.jl")
+include("write_oasis.jl")
 
 # Plotting
 function plot_cell end
