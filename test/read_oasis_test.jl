@@ -8,7 +8,7 @@
         ncell = length(oas.cells)
         @test ncell == 1
         top_cell = oas.cells[0]
-        cellname = OasisTools.find_reference(0, oas.references.cellNames)
+        cellname = OasisTools.get_reference(oas.metadata.source, 0, oas.references.cellNames)
         @test cellname == "TOP"
         subcells = top_cell.placements
         @test isempty(subcells)
@@ -31,13 +31,13 @@
         @test ncell == 2
         bottom_cell_number = cell_number(oas, "BOTTOM")
         bottom_cell = oas.cells[bottom_cell_number]
-        cellname = OasisTools.find_reference(bottom_cell_number, oas.references.cellNames)
+        cellname = OasisTools.get_reference(oas.metadata.source, bottom_cell_number, oas.references.cellNames)
         @test cellname == "BOTTOM"
         @test length(bottom_cell.shapes) == 1
         rectangle = bottom_cell.shapes[1]
         layer_number = rectangle.layerNumber
         datatype_number = rectangle.datatypeNumber
-        layername = OasisTools.find_reference(layer_number, datatype_number, oas.references.layerNames)
+        layername = OasisTools.get_reference(layer_number, datatype_number, oas.references.layerNames)
         @test layername == "TOP"
         rectangle_shape = rectangle.shape
         @test rectangle_shape isa Rect{2, Int64}
@@ -48,7 +48,7 @@
         top_cell_number = cell_number(oas, "TOP")
         @test top_cell_number == 0
         top_cell = oas.cells[top_cell_number]
-        cellname = OasisTools.find_reference(top_cell_number, oas.references.cellNames)
+        cellname = OasisTools.get_reference(oas.metadata.source, top_cell_number, oas.references.cellNames)
         @test cellname == "TOP"
         top_shape = shapes(oas["TOP"])[1]
         @test top_shape isa Shape{Rect{2, Int64}}
@@ -78,7 +78,7 @@
         @test circle isa Shape{Polygon{2, Int64}}
         text_cell = oas["TOP"]
         text = text_cell.shapes[1]
-        text_string = OasisTools.find_reference(text.shape.textNumber, oas.references.textStrings)
+        text_string = OasisTools.get_reference(oas.metadata.source, text.shape.textNumber, oas.references.textStrings)
         @test text_string == "This is not a circle"
     end
     @testset "Paths" begin
@@ -126,16 +126,16 @@
         oas = oasisread(filepath)
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with the following cells:
+OASIS file v1.0 with the following cell hierarchy:
 TOP
-├─ BOTTOM2 (4×)
+├─ BOTTOM2
 │  └─ ROCKBOTTOM
-├─ MIDDLE2
-│  └─ BOTTOM (5×)
-└─ MIDDLE (3×)
-   ├─ BOTTOM2 (4×)
-   │  └─ ⋯
-   └─ BOTTOM (2×)"""
+├─ MIDDLE
+│  ├─ BOTTOM2
+│  │  └─ ⋯
+│  └─ BOTTOM
+└─ MIDDLE2
+   └─ BOTTOM"""
         s = Suppressor.@capture_out Base.show(oas["ROCKBOTTOM"].shapes[1])
         @test s == "Polygon in layer (1/0) at (1, 0)"
         s = Suppressor.@capture_out Base.show(oas["BOTTOM2"].placements[1])
@@ -220,7 +220,7 @@ TOP
         @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with the following cells:
+OASIS file v1.0 with the following cell hierarchy:
 TOP
 OTHERTOP"""
         s = Suppressor.@capture_out show_cells(oas, "TOP")
@@ -250,8 +250,8 @@ end
         @test oas isa Oasis
         cell = oas["TOP"]
         @test cell isa LazyCell
-        @test cell.byteStart == 160
-        @test cell.placements == Dict{UInt64, Int64}()
+        @test cell.bytes[1] == 21 # Byte corresponding to start of POLYGON record
+        @test endswith(String(cell.source), ".oas")
         load_cell!(oas, "TOP")
         cell = oas["TOP"]
         @test cell isa Cell
@@ -263,13 +263,11 @@ end
         @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with the following cells:
-TOP
-└─ BOTTOM (31×)"""
+OASIS file v1.0 with unknown cell hierarchy"""
         top_cell = oas["TOP"]
-        @test top_cell.byteStart == 161
+        @test top_cell.bytes[1] == 17 # First byte of a PLACEMENT record
         bottom_cell = oas["BOTTOM"]
-        @test bottom_cell.byteStart == 150
+        @test bottom_cell.bytes[1] == 20 # RECTANGLE
     end
     @testset "Circle" begin
         filename = "circle.oas"
@@ -288,31 +286,9 @@ TOP
         filepath = joinpath(@__DIR__, "testdata", filename)
         oas = oasisread(filepath; lazy = true)
         @test oas isa Oasis
-        s = Suppressor.@capture_out show_cells(oas)
-        @test s == """
-TOP
-├─ BOTTOM2 (4×)
-│  └─ ROCKBOTTOM
-├─ MIDDLE2
-│  └─ BOTTOM (5×)
-└─ MIDDLE (3×)
-   ├─ BOTTOM2 (4×)
-   │  └─ ROCKBOTTOM
-   └─ BOTTOM (2×)"""
         load_cell!(oas, "BOTTOM")
         @test oas["BOTTOM"] isa Cell
         @test length(oas["BOTTOM"].shapes) == 1
-        s = Suppressor.@capture_out show_cells(oas)
-        @test s == """
-TOP
-├─ BOTTOM2 (4×)
-│  └─ ROCKBOTTOM
-├─ MIDDLE2
-│  └─ BOTTOM (5×)
-└─ MIDDLE (3×)
-   ├─ BOTTOM2 (4×)
-   │  └─ ROCKBOTTOM
-   └─ BOTTOM (2×)"""
     end
     @testset "Trapezoids" begin
         filename = "trapezoids.oas"
@@ -327,9 +303,7 @@ TOP
         @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with the following cells:
-TOP
-OTHERTOP"""
+OASIS file v1.0 with unknown cell hierarchy"""
         @test oas["TOP"] isa LazyCell
         @test oas["OTHERTOP"] isa LazyCell
     end

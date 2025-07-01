@@ -74,18 +74,18 @@ end
 
 function write_interval_type_3(state, interval)
     write_byte(state, 3)
-    write_byte(state, interval.low)
+    wui(state, interval.low)
 end
 
 function write_interval_type_2(state, interval)
     write_byte(state, 2)
-    write_byte(state, interval.low)
+    wui(state, interval.low)
 end
 
 function write_interval_type_4(state, interval)
     write_byte(state, 4)
-    write_byte(state, interval.low)
-    write_byte(state, interval.high)
+    wui(state, interval.low)
+    wui(state, interval.high)
 end
 
 function write_interval(state, interval::Interval)

@@ -1,5 +1,17 @@
 skip_record(state::AbstractParserState) = return
 
+function skip_start(state::ParserState)
+    skip_string(state)
+    skip_real(state)
+    offset_flag = rui(state)
+    if iszero(offset_flag)
+        # We ignore the 12 integers corresponding to the table offset structure.
+        for _ in 1:12
+            skip_integer(state)
+        end
+    end
+end
+
 function skip_propname_impl(state::ParserState)
     skip_string(state)
 end
@@ -20,58 +32,32 @@ end
 
 function skip_placement(state::LazyCellParserState)
     info_byte = read_byte(state)
-    cellname_explicit = bit_is_nonzero(info_byte, 1)
-    if cellname_explicit
-        cellname_as_ref = bit_is_nonzero(info_byte, 2)
-        if cellname_as_ref
-            cellname_number = rui(state)
+    if bit_is_nonzero(info_byte, 1)
+        if bit_is_nonzero(info_byte, 2)
+            skip_integer(state)
         else
-            cellname = read_string(state)
-            cellname_number = _find_or_make_reference(state.oas.references.cellNames, cellname)
+            skip_string(state)
         end
-        # Update the modal variable. We choose to always save the reference number instead of
-        # the string.
-        state.mod.placementCell = cellname_number
-    else
-        cellname_number = state.mod.placementCell
     end
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
-    nrep = read_nrep(state, info_byte, 5)
-    if haskey(state.placements, cellname_number)
-        state.placements[cellname_number] += nrep
-    else
-        state.placements[cellname_number] = nrep
-    end
+    bit_is_nonzero(info_byte, 5) && skip_repetition(state)
 end
 
 function skip_placement_mag_angle(state::LazyCellParserState)
     info_byte = read_byte(state)
-    cellname_explicit = bit_is_nonzero(info_byte, 1)
-    if cellname_explicit
-        cellname_as_ref = bit_is_nonzero(info_byte, 2)
-        if cellname_as_ref
-            cellname_number = rui(state)
+    if bit_is_nonzero(info_byte, 1)
+        if bit_is_nonzero(info_byte, 2)
+            skip_integer(state)
         else
-            cellname = read_string(state)
-            cellname_number = _find_or_make_reference(state.oas.references.cellNames, cellname)
+            skip_string(state)
         end
-        # Update the modal variable. We choose to always save the reference number instead of
-        # the string.
-        state.mod.placementCell = cellname_number
-    else
-        cellname_number = state.mod.placementCell
     end
     bit_is_nonzero(info_byte, 6) && skip_real(state)
     bit_is_nonzero(info_byte, 7) && skip_real(state)
     bit_is_nonzero(info_byte, 3) && skip_integer(state)
     bit_is_nonzero(info_byte, 4) && skip_integer(state)
-    nrep = read_nrep(state, info_byte, 5)
-    if haskey(state.placements, cellname_number)
-        state.placements[cellname_number] += nrep
-    else
-        state.placements[cellname_number] = nrep
-    end
+    bit_is_nonzero(info_byte, 5) && skip_repetition(state)
 end
 
 function skip_text(state::LazyCellParserState)
@@ -184,4 +170,11 @@ function skip_property(state::AbstractParserState)
             skip_property_value(state)
         end
     end
+end
+
+function skip_cblock(state::LazyCellParserState)
+    skip_integer(state)
+    skip_integer(state)
+    comp_byte_count = rui(state)
+    skip_bytes(state, comp_byte_count)
 end

@@ -19,16 +19,16 @@ oasisread(filepath)
 ```
 
 ```
-OASIS file v1.0 with the following cells:
+OASIS file v1.0 with the following cell hierarchy:
 TOP
-├─ BOTTOM2 (4×)
+├─ BOTTOM2
 │  └─ ROCKBOTTOM
-├─ MIDDLE2
-│  └─ BOTTOM (5×)
-└─ MIDDLE (3×)
-   ├─ BOTTOM2 (4×)
-   │  └─ ⋯
-   └─ BOTTOM (2×)
+├─ MIDDLE
+│  ├─ BOTTOM2
+│  │  └─ ⋯
+│  └─ BOTTOM
+└─ MIDDLE2
+   └─ BOTTOM
 ```
 
 It returns an `Oasis` object, which contains a list of all the cells in your OASIS file, in the form of a `Cell` object. Each cell, in turn, has a list of shapes (encoded as `Shape` objects), as well as a list of cells (i.e. placements of other cells within the specified cell).

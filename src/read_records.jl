@@ -18,28 +18,28 @@ end
 function read_cellname_impl(state::ParserState)
     cellname = read_string(state)
     cellname_number = length(state.oas.references.cellNames)
-    reference = NumericReference(cellname, cellname_number)
+    reference = NumericReference(state.oas.metadata.source, cellname, cellname_number)
     push!(state.oas.references.cellNames, reference)
 end
 
 function read_cellname_ref(state::ParserState)
     cellname = read_string(state)
     cellname_number = rui(state)
-    reference = NumericReference(cellname, cellname_number)
+    reference = NumericReference(state.oas.metadata.source, cellname, cellname_number)
     push!(state.oas.references.cellNames, reference)
 end
 
 function read_textstring_impl(state::ParserState)
     textstring = read_string(state)
     textstring_number = length(state.oas.references.textStrings)
-    reference = NumericReference(textstring, textstring_number)
+    reference = NumericReference(state.oas.metadata.source, textstring, textstring_number)
     push!(state.oas.references.textStrings, reference)
 end
 
 function read_textstring_ref(state::ParserState)
     textstring = read_string(state)
     textstring_number = rui(state)
-    reference = NumericReference(textstring, textstring_number)
+    reference = NumericReference(state.oas.metadata.source, textstring, textstring_number)
     push!(state.oas.references.textStrings, reference)
 end
 
@@ -80,9 +80,10 @@ function read_cell(state::ParserState, cellname_number::UInt64)
     end
     if state.lazy
         end_byte = cell_state.pos - 1
-        cell = LazyCell(start_byte, end_byte, cell_state.placements)
+        cell = LazyCell(state.oas.metadata.source, @view state.buf[start_byte:end_byte])
     else
-        cell = Cell(cell_state.shapes, cell_state.placements)
+        cell = Cell(state.oas.metadata.source, cell_state.shapes, cell_state.placements)
+        state.oas.hierarchy.hierarchy[cellname_number] = unique(p.nameNumber for p in cell.placements)
     end
     state.oas.cells[cellname_number] = cell
     state.pos = cell_state.pos
@@ -94,8 +95,12 @@ function read_cell_ref(state::ParserState)
 end
 
 function read_cell_str(state::ParserState)
-    cellname_string = read_string(state)
-    cellname_number = _find_or_make_reference(state.oas.references.cellNames, cellname_string)
+    cellname = read_string(state)
+    cellname_number = _get_or_make_reference(
+        state.oas.metadata.source,
+        state.oas.references.cellNames,
+        cellname
+    )
     read_cell(state, cellname_number)
 end
 
@@ -116,7 +121,11 @@ function read_placement(state::CellParserState)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = _find_or_make_reference(state.oas.references.cellNames, cellname)
+            cellname_number = _get_or_make_reference(
+                state.oas.metadata.source,
+                state.oas.references.cellNames,
+                cellname
+            )
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
@@ -131,6 +140,7 @@ function read_placement(state::CellParserState)
     is_flipped = bit_is_nonzero(info_byte, 8)
     placement = CellPlacement(cellname_number, location, rotation, 1.0, is_flipped, repetition)
     push!(state.placements, placement)
+
 end
 
 function read_placement_mag_angle(state::CellParserState)
@@ -142,7 +152,11 @@ function read_placement_mag_angle(state::CellParserState)
             cellname_number = rui(state)
         else
             cellname = read_string(state)
-            cellname_number = _find_or_make_reference(state.oas.references.cellNames, cellname)
+            cellname_number = _get_or_make_reference(
+                state.oas.metadata.source,
+                state.oas.references.cellNames,
+                cellname
+            )
             # If a string is used to denote the cellname, find the corresponding reference. If
             # no such reference exists (yet?), create a random one ourselves.
         end
@@ -179,7 +193,11 @@ function read_text(state::CellParserState)
             text_number = rui(state)
         else
             text = read_string(state)
-            text_number = _find_or_make_reference(state.references.textStrings, text)
+            text_number = _get_or_make_reference(
+                state.oas.metadata.source,
+                state.oas.references.textStrings,
+                text
+            )
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
@@ -491,6 +509,38 @@ function read_circle(state::CellParserState)
     push!(state.shapes, shape)
 end
 
+function read_property_if_S_TOP_CELL(state::ParserState)
+    # We ignore all properties except for making a half-assed attempt at finding the S_TOP_CELL
+    # property.
+    info_byte = read_byte(state)
+    if bit_is_nonzero(info_byte, 6)
+        if bit_is_nonzero(info_byte, 7)
+            skip_integer(state)
+        else
+            s = read_string(state)
+            if s == "S_TOP_CELL"
+                # S_TOP_CELL has a single string value.
+                top_cell_name = read_property_value(state)
+                top_cell_number = get_reference(
+                    top_cell_name,
+                    state.oas.references.cellNames
+                )
+                push!(state.oas.hierarchy.roots, top_cell_number)
+                return
+            end
+        end
+    end
+    if !bit_is_nonzero(info_byte, 5)
+        number_of_values = info_byte >> 4
+        if number_of_values == 0x0f
+            number_of_values = rui(state)
+        end
+        for _ in 1:number_of_values
+            skip_property_value(state)
+        end
+    end
+end
+
 function read_cblock(state::AbstractParserState)
     comp_type = rui(state)
     @assert comp_type == 0x00 "Unknown compression type encountered"
@@ -565,7 +615,7 @@ function read_record(record_type::UInt8, state::LazyCellParserState)
     record_type == 21 && return skip_polygon(state) # POLYGON
     record_type == 18 && return skip_placement_mag_angle(state) # PLACEMENT
     record_type == 22 && return skip_path(state) # PATH
-    record_type == 34 && return read_cblock(state) # CBLOCK
+    record_type == 34 && return skip_cblock(state) # CBLOCK
     record_type == 15 && return skip_record(state) # XYABSOLUTE
     record_type == 16 && return skip_record(state) # XYRELATIVE
     record_type == 19 && return skip_text(state) # TEXT

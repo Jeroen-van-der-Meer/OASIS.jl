@@ -17,7 +17,7 @@ julia> using OasisTools;
 julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
 
 julia> oas = oasisread(filename)
-OASIS file v1.0 with the following cells:
+OASIS file v1.0 with the following cell hierarchy:
 TOP
 ```
 
@@ -32,6 +32,7 @@ TOP
 function oasisread(filename::AbstractString; lazy::Bool = false)
     buf = mmap(filename)
     state = ParserState(buf; lazy = lazy)
+    state.oas.metadata.source = Symbol(filename)
 
     header = read_bytes(state, 13)
     @assert all(header .== MAGIC_BYTES) "Wrong header bytes; likely not an OASIS file."
@@ -41,6 +42,8 @@ function oasisread(filename::AbstractString; lazy::Bool = false)
         record_type == 0x02 && break # Stop when encountering END record. Ignoring checksum.
         read_record(record_type, state)
     end
+
+    find_root_cell(state)
 
     return state.oas
 end

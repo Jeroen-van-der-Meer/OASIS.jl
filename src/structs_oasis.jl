@@ -25,20 +25,61 @@ end
 abstract type AbstractReference end
 
 struct NumericReference <: AbstractReference
+    source::Symbol
     name::String
     number::UInt64
 end
 
-function find_reference(number::Integer, references::AbstractVector{NumericReference})
-    index = findfirst(r -> r.number == number, references)
-    isnothing(index) && return index
+function get_reference(
+    source::Symbol,
+    number::Integer,
+    references::AbstractVector{NumericReference}
+)
+    index = find_reference(source, number, references)
+    isnothing(index) && return
     return references[index].name
 end
 
-function find_reference(name::AbstractString, references::AbstractVector{NumericReference})
-    index = findfirst(r -> r.name == name, references)
-    isnothing(index) && return index
+function find_reference(
+    source::Symbol,
+    number::Integer,
+    references::AbstractVector{NumericReference}
+)
+    return findfirst(r -> (r.source == source && r.number == number), references)
+end
+
+function get_reference(
+    source::Symbol,
+    name::AbstractString,
+    references::AbstractVector{NumericReference}
+)
+    index = find_reference(source, name, references)
+    isnothing(index) && return
     return references[index].number
+end
+
+function find_reference(
+    source::Symbol,
+    name::AbstractString,
+    references::AbstractVector{NumericReference}
+)
+    return findfirst(r -> (r.source == source && r.name == name), references)
+end
+
+function get_reference(
+    name::AbstractString,
+    references::AbstractVector{NumericReference}
+)
+    index = find_reference(name, references)
+    isnothing(index) && return
+    return references[index].number
+end
+
+function find_reference(
+    name::AbstractString,
+    references::AbstractVector{NumericReference}
+)
+    return findfirst(r -> r.name == name, references)
 end
 
 struct LayerReference <: AbstractReference
@@ -47,7 +88,7 @@ struct LayerReference <: AbstractReference
     datatypeInterval::Interval
 end
 
-function find_reference(l::UInt64, d::UInt64, refs::AbstractVector{LayerReference})
+function get_reference(l::UInt64, d::UInt64, refs::AbstractVector{LayerReference})
     index = findfirst(r -> (l in r.layerInterval && d in r.datatypeInterval), refs)
     return refs[index].name
 end
@@ -60,6 +101,7 @@ Base.@kwdef struct References
 end
 
 Base.@kwdef mutable struct Metadata
+    source::Symbol = Symbol()
     version::VersionNumber = v"1.0"
     unit::Float64 = 1.0
 end
@@ -118,6 +160,7 @@ end
 See also [`LazyCell`](@ref).
 """
 struct Cell
+    source::Symbol
     shapes::Vector{Shape} # Might have references to other cells within them?
     placements::Vector{CellPlacement} # Other cells
 end
@@ -136,7 +179,6 @@ List the placements contained in `cell`. Not yet supported for `LazyCell`s.
 """
 placements(cell::Cell) = cell.placements
 
-
 """
     struct LazyCell(byte, placements)
 
@@ -144,18 +186,19 @@ Lazy-loaded version of a `Cell`.
 
 # Properties
 
-- `byteStart::Int64`: Location of first byte of corresponding CELL record. 
-- `byteEnd::Int64`: Location of first byte of corresponding CELL record. 
-- `placements::Dict{UInt64, Int64}`: Unlike in a `Cell`, a `LazyCell` only stores whether
-  or not other cells are placed within it, and if so, how often. No further information about
-  e.g. the location of said placements is stored into memory.
+- `source::Symbol`: Name of the file the cell came from.
+- `bytes::Vector{UInt8}`: Bytes of the corresponding CELL record.
 
 See also [`Cell`](@ref), [`load_cell!`](@ref).
 """
 struct LazyCell
-    byteStart::Int64
-    byteEnd::Int64
-    placements::Dict{UInt64, Int64}
+    source::Symbol
+    bytes::SubArray{UInt8, 1, Vector{UInt8}, Tuple{UnitRange{Int64}}, true}
+end
+
+Base.@kwdef struct CellHierarchy
+    hierarchy::Dict{UInt64, Vector{UInt64}} = Dict()
+    roots::Vector{UInt64} = []
 end
 
 """
@@ -165,23 +208,20 @@ Object containing all the data of your OASIS file.
 
 # Properties
 
-- `buf::Vector{UInt8}`: Memory mapped buffer of the OASIS file on your hard drive.
 - `cells::Dict{UInt64, Union{Cell, LazyCell}}`: The actual contents. All cells, indexed by
   their name number. The cells can either be `Cell` objects or lazy-loaded `LazyCell` objects.
+- `hierarchy::CellHierarchy`: Overview of hierarchy of cells and their placements. Not guaranteed
+  to be available if the OASIS file was lazy-loaded.
 - `metadata::Metadata`: File version and length unit.
 - `references::References`: To save on storage space, in an OASIS file, names of cells, layers,
   etc. are stored only once and are then referenced with a number. We mirror this behaviour in
   `OasisTools.jl`.
 """
-struct Oasis
-    buf::Vector{UInt8}
-    cells::Dict{UInt64, Union{Cell, LazyCell}}
-    metadata::Metadata
-    references::References
-end
-
-function Oasis(buf::AbstractVector{UInt8})
-    return Oasis(buf, Dict(), Metadata(), References())
+Base.@kwdef struct Oasis
+    cells::Dict{UInt64, Union{Cell, LazyCell}} = Dict()
+    hierarchy::CellHierarchy = CellHierarchy()
+    metadata::Metadata = Metadata()
+    references::References = References()
 end
 
 function Base.getindex(oas::Oasis, cell_name::String)
@@ -203,9 +243,14 @@ julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
 
 julia> oas = oasisread(filename);
 
-julia> cells(oas)
-Dict{UInt64, Cell} with 1 entry:
-  0x0000000000000000 => Cell(Shape[Polygon in layer (1/0) at (-500, 0)], CellPl…
+julia> cls = cells(oas);
+
+julia> keys(cls)
+KeySet for a Dict{UInt64, Union{Cell, LazyCell}} with 1 entry. Keys:
+  0x0000000000000000
+
+julia> cell_name(oas, 0x00)
+"TOP"
 ```
 """
 cells(oas::Oasis) = oas.cells
@@ -255,7 +300,7 @@ true
 
 See also [`cell_number`](@ref).
 """
-cell_name(oas::Oasis, cell_number::Integer) = find_reference(cell_number, oas.references.cellNames)
+cell_name(oas::Oasis, cell_number::Integer) = get_reference(oas.metadata.source, cell_number, oas.references.cellNames)
 
 """
     cell_number(oas, cell_name)
@@ -280,7 +325,7 @@ true
 
 See also [`cell_name`](@ref).
 """
-cell_number(oas::Oasis, cell_name::AbstractString) = find_reference(cell_name, oas.references.cellNames)
+cell_number(oas::Oasis, cell_name::AbstractString) = get_reference(cell_name, oas.references.cellNames)
 
 """
     load_cell!(oas, cell_name)
@@ -294,13 +339,15 @@ julia> using OasisTools;
 
 julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "nested.oas");
 
-julia> oas["BOTTOM"]
-LazyCell(173, 180, Dict{UInt64, Int64}())
+julia> oas = oasisread(filename; lazy = true);
+
+julia> typeof(oas["BOTTOM"])
+LazyCell
 
 julia> load_cell!(oas, "BOTTOM");
 
-julia> oas["BOTTOM"]
-Cell(Shape[Polygon in layer (1/0) at (0, 0)], CellPlacement[])
+julia> typeof(oas["BOTTOM"])
+Cell
 ```
 """
 function load_cell!(oas::Oasis, cell_name::AbstractString)
@@ -312,48 +359,13 @@ end
 load_cell!(::Oasis, ::UInt64, ::Cell) = return
 
 function load_cell!(oas::Oasis, cell_number::UInt64, lazy_cell::LazyCell)
-    state = CellParserState([], [], oas.buf, lazy_cell.byteStart, ModalVariables(), oas.references)
-    while state.pos <= lazy_cell.byteEnd
+    state = CellParserState(oas, lazy_cell.bytes)
+    while state.pos < length(lazy_cell.bytes)
         record_type = read_byte(state)
         read_record(record_type, state)
     end
-    cell = Cell(state.shapes, state.placements)
+    cell = Cell(oas.metadata.source, state.shapes, state.placements)
     oas.cells[cell_number] = cell
-end
-
-struct CellHierarchy
-    hierarchy::Dict{UInt64, Dict{UInt64, Int64}}
-    roots::Set{UInt64}
-end
-
-function CellHierarchy(h::Dict{UInt64, Dict{UInt64, Int64}})
-    all_nodes = Set(keys(h))
-    child_nodes = Set(k for children in values(h) for (k, v) in pairs(children) if v > 0)
-    roots = setdiff(all_nodes, child_nodes) # There can be multiple roots
-    return CellHierarchy(h, roots)
-end
-
-function CellHierarchy(oas::Oasis)
-    h = Dict{UInt64, Dict{UInt64, Int64}}()
-    for (cell_number, cell) in pairs(oas.cells)
-        h[cell_number] = CellHierarchy(cell)
-    end
-    return CellHierarchy(h)
-end
-
-function CellHierarchy(cell::Cell)
-    counts = Dict{UInt64, Int64}()
-    for placement in cell.placements
-        n = placement.nameNumber
-        if haskey(counts, n)
-            counts[n] += nrep(placement.repetition)
-        else
-            counts[n] = nrep(placement.repetition)
-        end
-    end
-    return counts
-end
-
-function CellHierarchy(cell::LazyCell)
-    return cell.placements
+    oas.hierarchy.hierarchy[cell_number] = unique(p.nameNumber for p in cell.placements)
+    return oas
 end

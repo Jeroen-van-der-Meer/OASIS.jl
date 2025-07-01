@@ -91,7 +91,7 @@
         @test OasisTools.read_repetition(CellParserState([0x0b, 0x01, 0x02, 0xe9, 0x03, 0x7a, 0xe9, 0x03, 0x7a])) ==
             Point{2, Int64}[(0, 0), (244, 122), (488, 244)]
     end
-    @testset "Intervals" begin
+    @testset "Read intervals" begin
         @test OasisTools.read_interval(ParserState([0x00, 0x80, 0x01, 0x80, 0x02])) == OasisTools.Interval(0, typemax(UInt64))
         @test OasisTools.read_interval(ParserState([0x01, 0x80, 0x01, 0x80, 0x02])) == OasisTools.Interval(0, 128)
         @test OasisTools.read_interval(ParserState([0x02, 0x80, 0x01, 0x80, 0x02])) == OasisTools.Interval(128, typemax(UInt64))

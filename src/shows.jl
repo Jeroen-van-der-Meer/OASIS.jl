@@ -34,7 +34,7 @@ function show_cells(
             println(io, cell_name(oas, cell_number))
         end
     else
-        cell_hierarchy = CellHierarchy(oas)
+        cell_hierarchy = oas.hierarchy
         if isempty(cell_string)
             roots = cell_hierarchy.roots
         else
@@ -51,10 +51,13 @@ end
 # Custom shows
 
 function Base.show(io::IO, oas::Oasis)
-    print(io,
-        "OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ",
-        "with the following cells:\n")
-    show_cells(oas; maxdepth = 2, flat = false, io = io)
+    print(io, "OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ")
+    if isempty(oas.hierarchy.roots)
+        print(io, "with unknown cell hierarchy")
+    else
+        print(io, "with the following cell hierarchy:\n")
+        show_cells(oas; maxdepth = 2, flat = false, io = io)
+    end
 end
 
 function Base.show(io::IO, placement::CellPlacement)
@@ -90,47 +93,51 @@ end
 
 function _show_hierarchy(
     oas::Oasis;
-    cell_hierarchy = CellHierarchy(oas),
+    cell_hierarchy = oas.hierarchy,
     maxdepth = 100, io = stdout, count = 1,
     current_depth = 0, prefix = "", last = true, roots = cell_hierarchy.roots
 )
     for (i, root) in enumerate(roots)
         if current_depth == 0
             i > 1 && print('\n')
-            print(io, prefix, find_reference(root, oas.references.cellNames))
+            print(io, prefix, get_reference(oas.metadata.source, root, oas.references.cellNames))
             new_prefix = prefix
         else
             print('\n')
             connector = last ? "└─ " : "├─ "
-            print(io, prefix, connector, find_reference(root, oas.references.cellNames))
+            print(io, prefix, connector, get_reference(oas.metadata.source, root, oas.references.cellNames))
             # If a cell occurs N times with N > 1, we annotate the cell name with "(N×)".
             count > 1 && print(io, " ($(count)×)")
             new_prefix = prefix * (last ? "   " : "│  ")
         end
-        count_map = cell_hierarchy.hierarchy[root]
-        nunique_children = length(count_map)
-        # If `maxdepth` is reached, we check whether the current element has any further children.
-        # Rather than printing them, we print an ellipsis (⋯) to indicate that there are children.
-        if current_depth >= maxdepth
-            if nunique_children > 0
-                print(io, '\n', new_prefix, "└─ ⋯")
+        if haskey(cell_hierarchy.hierarchy, root)
+            children = cell_hierarchy.hierarchy[root]
+            nunique_children = length(children)
+            # If `maxdepth` is reached, we check whether the current element has any further children.
+            # Rather than printing them, we print an ellipsis (⋯) to indicate that there are children.
+            if current_depth >= maxdepth
+                if nunique_children > 0
+                    print(io, '\n', new_prefix, "└─ ⋯")
+                end
+                return
             end
-            return
-        end
-        
-        for (i, (child, count)) in enumerate(pairs(count_map))
-            child_is_last = i == nunique_children
-            _show_hierarchy(
-                oas;
-                cell_hierarchy = cell_hierarchy,
-                maxdepth = maxdepth,
-                io = io,
-                count = count,
-                roots = [child],
-                current_depth = current_depth + 1,
-                prefix = new_prefix,
-                last = child_is_last
-            )
+            
+            for (i, child) in enumerate(children)
+                child_is_last = i == nunique_children
+                _show_hierarchy(
+                    oas;
+                    cell_hierarchy = cell_hierarchy,
+                    maxdepth = maxdepth,
+                    io = io,
+                    count = count,
+                    roots = [child],
+                    current_depth = current_depth + 1,
+                    prefix = new_prefix,
+                    last = child_is_last
+                )
+            end
+        else
+            print(io, '\n', new_prefix, "└─ ?")
         end
     end
 end

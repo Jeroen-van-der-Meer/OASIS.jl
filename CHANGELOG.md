@@ -3,11 +3,11 @@
 ## Unreleased
 
 - Custom shows.
-- Syntax `oas["cellname"]` to access a cell.
-- Minor performance improvements.
-- TRAPEZOID and CTRAPEZOID records now parse correctly.
-- More lenient dependency compats.
 - Lazy loading.
+- Limited writing functionality.
+- Bug fixes.
+- Minor performance improvements.
+- More lenient dependency compats.
 
 ## v0.1.0
 
