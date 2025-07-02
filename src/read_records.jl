@@ -114,9 +114,9 @@ end
 
 function read_placement(state::CellParserState)
     info_byte = read_byte(state)
-    cellname_explicit = bit_is_nonzero(info_byte, 1)
+    cellname_explicit = bit_is_one(info_byte, 1)
     if cellname_explicit
-        cellname_as_ref = bit_is_nonzero(info_byte, 2)
+        cellname_as_ref = bit_is_one(info_byte, 2)
         if cellname_as_ref
             cellname_number = rui(state)
         else
@@ -137,7 +137,7 @@ function read_placement(state::CellParserState)
     location = Point{2, Int64}(x, y)
     rotation = ((info_byte >> 1) & 0x03) * 90
     repetition = read_repetition(state, info_byte, 5)
-    is_flipped = bit_is_nonzero(info_byte, 8)
+    is_flipped = bit_is_one(info_byte, 8)
     placement = CellPlacement(cellname_number, location, rotation, 1.0, is_flipped, repetition)
     push!(state.placements, placement)
 
@@ -145,9 +145,9 @@ end
 
 function read_placement_mag_angle(state::CellParserState)
     info_byte = read_byte(state)
-    cellname_explicit = bit_is_nonzero(info_byte, 1)
+    cellname_explicit = bit_is_one(info_byte, 1)
     if cellname_explicit
-        cellname_as_ref = bit_is_nonzero(info_byte, 2)
+        cellname_as_ref = bit_is_one(info_byte, 2)
         if cellname_as_ref
             cellname_number = rui(state)
         else
@@ -166,12 +166,12 @@ function read_placement_mag_angle(state::CellParserState)
     else
         cellname_number = state.mod.placementCell
     end
-    if bit_is_nonzero(info_byte, 6)
+    if bit_is_one(info_byte, 6)
         magnification = read_real(state)
     else
         magnification = 1.0
     end
-    if bit_is_nonzero(info_byte, 7)
+    if bit_is_one(info_byte, 7)
         rotation = read_real(state)
     else
         rotation = 0.0
@@ -179,16 +179,16 @@ function read_placement_mag_angle(state::CellParserState)
     x, y = read_or_modal_xy(state, Val(:placementX), Val(:placementY), info_byte, 3)
     location = Point{2, Int64}(x, y)
     repetition = read_repetition(state, info_byte, 5)
-    is_flipped = bit_is_nonzero(info_byte, 8)
+    is_flipped = bit_is_one(info_byte, 8)
     placement = CellPlacement(cellname_number, location, rotation, magnification, is_flipped, repetition)
     push!(state.placements, placement)
 end
 
 function read_text(state::CellParserState)
     info_byte = read_byte(state)
-    text_explicit = bit_is_nonzero(info_byte, 2)
+    text_explicit = bit_is_one(info_byte, 2)
     if text_explicit
-        text_as_ref = bit_is_nonzero(info_byte, 3)
+        text_as_ref = bit_is_one(info_byte, 3)
         if text_as_ref
             text_number = rui(state)
         else
@@ -217,7 +217,7 @@ end
 
 function read_rectangle(state::CellParserState)
     info_byte = read_byte(state)
-    is_square = bit_is_nonzero(info_byte, 1)
+    is_square = bit_is_one(info_byte, 1)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
     datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
     width = signed(read_or_modal(state, rui, Val(:geometryW), info_byte, 2))
@@ -259,7 +259,7 @@ function read_path(state::CellParserState)
     layer_number = read_or_modal(state, rui, Val(:layer), info_byte, 8)
     datatype_number = read_or_modal(state, rui, Val(:datatype), info_byte, 7)
     halfwidth = read_or_modal(state, rui, Val(:pathHalfwidth), info_byte, 2)
-    extension_scheme_present = bit_is_nonzero(info_byte, 1)
+    extension_scheme_present = bit_is_one(info_byte, 1)
     if extension_scheme_present
         extension_scheme = read_byte(state)
         SS_bits = (extension_scheme >> 2) & 0x03
@@ -345,7 +345,7 @@ function read_trapezoid(state::CellParserState, delta_a_explicit::Bool, delta_b_
     x, y = read_or_modal_xy(state, Val(:geometryX), Val(:geometryY), info_byte, 4)
     repetition = read_repetition(state, info_byte, 6)
 
-    if bit_is_nonzero(info_byte, 1) # Vertical orientation
+    if bit_is_one(info_byte, 1) # Vertical orientation
         vertices = [
             Point{2, Int64}(0, max(delta_a, 0)),
             Point{2, Int64}(width, max(-delta_a, 0)),
@@ -513,8 +513,8 @@ function read_property_if_S_TOP_CELL(state::ParserState)
     # We ignore all properties except for making a half-assed attempt at finding the S_TOP_CELL
     # property.
     info_byte = read_byte(state)
-    if bit_is_nonzero(info_byte, 6)
-        if bit_is_nonzero(info_byte, 7)
+    if bit_is_one(info_byte, 6)
+        if bit_is_one(info_byte, 7)
             skip_integer(state)
         else
             s = read_string(state)
@@ -530,7 +530,7 @@ function read_property_if_S_TOP_CELL(state::ParserState)
             end
         end
     end
-    if !bit_is_nonzero(info_byte, 5)
+    if !bit_is_one(info_byte, 5)
         number_of_values = info_byte >> 4
         if number_of_values == 0x0f
             number_of_values = rui(state)

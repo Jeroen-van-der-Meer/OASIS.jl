@@ -1,0 +1,285 @@
+@testset "Write LazyCells" begin
+    @testset "Polygon" begin
+        filename = "polygon.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        
+        state = OasisTools.WriterState(oas, "temp", 1024 * 1024)
+        cell = oas["TOP"]
+        cell_num = cell_number(oas, "TOP")
+        OasisTools.write_cell(state, cell_num, cell)
+
+        @test read_and_reset(state, state.pos - 1) == [
+            0x0d, # CELL record
+            0x00, # New reference
+            0x15, # POLYGON record
+            0x3b, 0x01, 0x00, 0x04, 0x03, # General polygon stuff
+            0x82, 0x7d, 0x88, 0x7d, 0x86,
+            0x7d, 0xd1, 0x0f, 0xd1, 0x0f
+        ]
+    end
+    @testset "Boxes" begin
+        filename = "boxes.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        
+        state = OasisTools.WriterState(oas, "temp", 1024 * 1024)
+        cell = oas["TOP"]
+        cell_num = cell_number(oas, "TOP")
+        OasisTools.write_cell(state, cell_num, cell)
+
+        @test read_and_reset(state, state.pos - 1) == [
+            0x0d, # CELL record
+            0x00, # New reference
+            0x11, # PLACEMENT record
+            0xfc, 0x01, 0x91, 0x08, 0xb0, # General placement stuff
+            0x22, 0x08, 0x04, 0x03, 0xe2,
+            0x03, 0xc9, 0x01, 0x3d,
+            0x11, # Another PLACEMENT record
+            0x44, # 0b01000100; modal variables used for all information
+            0x14, # RECTANGLE record
+            0x7f, 0x01, 0x01, 0x00, 0x8c, # General rectangle stuff
+            0x01, 0xc1, 0x02, 0x99, 0x0c,
+            0x0b, 0x02, 0x0a, 0x17, 0x06,
+            0x17, 0x06, 0x17, 0x06
+        ]
+        
+        state = OasisTools.WriterState(oas, "temp", 1024 * 1024)
+        cell = oas["BOTTOM"]
+        cell_num = cell_number(oas, "BOTTOM")
+        OasisTools.write_cell(state, cell_num, cell)
+
+        @test read_and_reset(state, state.pos - 1) == [
+            0x0d, # CELL record
+            0x01, # New reference
+            0x14, # RECTANGLE record
+            0xdb, 0x01, 0x00, 0x0a, 0xfd, # General rectangle stuff
+            0x02, 0xec, 0x2c
+        ]
+    end
+end
+
+@testset "Write lazy OASIS files" begin
+    # Strategy: Lazily load each OASIS file as provided in `testdata`, then save it to a
+    # temporary file `"temp"` and load it again. The resulting object should have essentially
+    # the same contents.
+    # Note: Between each subsequent @testset, we run GC.gc(). This is needed because
+    # `oas = oasisread("temp")` implicitly casts an mmap onto the file `"temp"`, which causes
+    # the OS to lock the file until `oas` is garbage-collected.
+    @testset "Polygon" begin
+        filename = "polygon.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        @test oas isa Oasis
+        ncell = length(oas.cells)
+        @test ncell == 1
+        top_cell = oas["TOP"]
+        subcells = top_cell.placements
+        @test isempty(subcells)
+        shapes = top_cell.shapes
+        @test length(shapes) == 1
+        polygon = top_cell.shapes[1].shape
+        @test polygon isa Polygon
+        @test polygon.exterior == [
+            Point{2, Int64}(-1000, -1000), Point{2, Int64}(-1000, 0),
+            Point{2, Int64}(0, 1000), Point{2, Int64}(0, 0)
+        ]
+    end
+    GC.gc()
+    @testset "Boxes" begin
+        # Contains: Two layers, cell placement with repetition, rectangles.
+        filename = "boxes.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        @test oas isa Oasis
+        ncell = length(oas.cells)
+        @test ncell == 2
+        bottom_cell_number = cell_number(oas, "BOTTOM")
+        bottom_cell = oas.cells[bottom_cell_number]
+        cellname = OasisTools.get_reference(oas.metadata.source, bottom_cell_number, oas.references.cellNames)
+        @test cellname == "BOTTOM"
+        @test length(bottom_cell.shapes) == 1
+        rectangle = bottom_cell.shapes[1]
+        layer_number = rectangle.layerNumber
+        datatype_number = rectangle.datatypeNumber
+        layername = OasisTools.get_reference(layer_number, datatype_number, oas.references.layerNames)
+        @test layername == "TOP"
+        rectangle_shape = rectangle.shape
+        @test rectangle_shape isa Rect{2, Int64}
+        @test rectangle_shape == Rect{2, Int64}(
+            Point{2, Int64}(-190, 2870),
+            Point{2, Int64}(10, 10)
+        )
+        top_shape = shapes(oas["TOP"])[1]
+        @test top_shape isa Shape{Rect{2, Int64}}
+        s = Suppressor.@capture_out Base.show(top_shape)
+        @test s == "Rectangle in layer (1/1) at (-160, -710) (4×)"
+    end
+    GC.gc()
+    @testset "Circle" begin
+        filename = "circle.oas" # 156.600 μs (169 allocations: 223.48 KiB)
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        @test oas isa Oasis
+        circle_cell = oas["CIRCLE\$1"]
+        circle = circle_cell.shapes[1]
+        @test circle isa Shape{Polygon{2, Int64}}
+        text_cell = oas["TOP"]
+        text = text_cell.shapes[1]
+        text_string = OasisTools.get_reference(oas.metadata.source, text.shape.textNumber, oas.references.textStrings)
+        @test text_string == "This is not a circle"
+    end
+    GC.gc()
+    @testset "Paths" begin
+        filename = "paths.oas" # 143.800 μs (120 allocations: 77.43 KiB)
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        @test oas isa Oasis
+        ncell = length(oas.cells)
+        @test ncell == 1
+        top_cell = oas["TOP"]
+        nplacement = length(top_cell.placements)
+        @test nplacement == 0
+        shapes = [s.shape for s in top_cell.shapes]
+        @test length(shapes) == 6 # Four paths and two circles for the rounded path
+        path_1 = shapes[1]
+        @test path_1.points == Point{2, Int64}[(-508, 268), (-253, 22), (-342, 190), (-157, 176)]
+        @test path_1.width == 100
+        path_2 = shapes[2]
+        @test path_2.points == Point{2, Int64}[(-263, 431), (-116, 420), (-228, 315), (-182, 482)]
+        @test path_2.width == 50
+        path_3 = shapes[3]
+        @test path_3.points == Point{2, Int64}[(-343, 273), (-386, 294), (-351, 303)]
+        @test path_3.width == 10
+        start_circle = shapes[4]
+        @test start_circle.center == Point{2, Int64}(-343, 273)
+        @test start_circle.r == 5
+        end_circle = shapes[5]
+        @test end_circle.center == Point{2, Int64}(-351, 303)
+        @test end_circle.r == 5
+        path_4 = shapes[6]
+        @test path_4.points == Point{2, Int64}[(-257, 236), (-255, 238), (-254, 237)]
+        @test path_4.width == 2
+    end
+    GC.gc()
+    @testset "Nested" begin
+        filename = "nested.oas" # 161.300 μs (232 allocations: 225.47 KiB)
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        s = Suppressor.@capture_out Base.show(oas["ROCKBOTTOM"].shapes[1])
+        @test s == "Polygon in layer (1/0) at (1, 0)"
+        s = Suppressor.@capture_out Base.show(oas["BOTTOM2"].placements[1])
+        # Interestingly, in the original file, this placement prints as "Placement of cell 6 at
+        # (1, 0)". This indicates that the ordering of the cells in the file was not preserved
+        # when saving. This is not an issue.
+        @test s == "Placement of cell 5 at (1, 0)"
+        s = Suppressor.@capture_out Base.show(oas["MIDDLE2"].placements[1])
+        @test s == "Placement of cell 3 at (-5, -3) (2×)"
+        bottom = oas["BOTTOM"]
+        @test length(bottom.shapes) == 1
+        bottom2 = oas["BOTTOM2"]
+        @test length(bottom2.placements) == 1
+        @test length(bottom2.shapes) == 1
+        placement = bottom2.placements[1]
+        @test placement.rotation == 90
+        @test placement.magnification == 0.5
+        @test placement.location == Point{2, Int64}(1, 0)
+        shape = bottom2.shapes[1].shape
+        @test shape == Rect{2, Int64}([0, 0], [1, 1])
+        middle2 = oas["MIDDLE2"]
+        @test length(middle2.placements) == 2
+        placement1 = middle2.placements[1]
+        @test placement1.location == Point{2, Int64}(-5, -3)
+        @test placement1.magnification == 1
+        @test placement1.rotation == 0
+        @test placement1.repetition == Point{2, Int64}[(0, 0), (2, 0)]
+        placement2 = middle2.placements[2]
+        @test placement2.location == Point{2, Int64}(-3, -1)
+        @test placement2.magnification == 2
+        @test placement2.rotation == 180
+        @test placement2.repetition == Point{2, Int64}[(0, 0), (2, 0), (4, 0)]
+    end
+    GC.gc()
+    @testset "Trapezoids" begin
+        filename = "trapezoids.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        cell = oas["noname"]
+        @test length(cell.shapes) == 7
+        @test cell.shapes[1] isa Shape{OasisTools.Text}
+        polygon1 = cell.shapes[2]
+        @test polygon1.shape.exterior == [
+            Point{2, Int64}(28810, -17702), Point{2, Int64}(28813, -17703),
+            Point{2, Int64}(28813, -17698), Point{2, Int64}(28810, -17696)
+        ]
+        polygon2 = cell.shapes[3]
+        @test polygon2.shape.exterior == [
+            Point{2, Int64}(28796, -17701), Point{2, Int64}(28796, -17705),
+            Point{2, Int64}(28800, -17705), Point{2, Int64}(28803, -17701)
+        ]
+        polygon3 = cell.shapes[4]
+        @test polygon3.shape.exterior == [
+            Point{2, Int64}(28805, -17705), Point{2, Int64}(28807, -17703),
+            Point{2, Int64}(28807, -17698), Point{2, Int64}(28805, -17700)
+        ]
+        polygon4 = cell.shapes[5]
+        @test polygon4.shape.exterior == [
+            Point{2, Int64}(28800, -17707), Point{2, Int64}(28799, -17710),
+            Point{2, Int64}(28806, -17710), Point{2, Int64}(28805, -17707)
+        ]
+        polygon5 = cell.shapes[6]
+        @test polygon5.shape.exterior == [
+            Point{2, Int64}(28809, -17704), Point{2, Int64}(28810, -17706),
+            Point{2, Int64}(28814, -17706), Point{2, Int64}(28813, -17704)
+        ]
+        polygon6 = cell.shapes[7]
+        @test polygon6.shape.exterior == [
+            Point{2, Int64}(28794, -17696), Point{2, Int64}(28797, -17699),
+            Point{2, Int64}(28801, -17699), Point{2, Int64}(28802, -17696)
+        ]
+    end
+    GC.gc()
+    @testset "Two top cells" begin
+        filename = "topcells.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        @test oas isa Oasis
+        s = Suppressor.@capture_out Base.show(oas)
+        @test s == """
+OASIS file v1.0 with the following cell hierarchy:
+TOP
+OTHERTOP"""
+        s = Suppressor.@capture_out show_cells(oas, "TOP")
+        @test s == "TOP"
+    end
+    GC.gc()
+    @testset "Flipped" begin
+        filename = "flipped.oas"
+        filepath = joinpath(@__DIR__, "testdata", filename)
+        oas = oasisread(filepath; lazy = true)
+        oasiswrite("temp", oas)
+        oas = oasisread("temp")
+        @test oas isa Oasis
+        cell = oas["TOP"]
+        placement1 = placements(cell)[1]
+        @test placement1.rotation == 10
+        @test placement1.flipped == false
+        placement2 = placements(cell)[2]
+        @test placement2.rotation == 10
+        @test placement2.flipped == true
+    end
+end

@@ -98,18 +98,29 @@ new_state(::LazyCellParserState, new_buf::AbstractVector{UInt8}) =
 
 Struct used to encode the state of the OASIS file writer.
 
-See also [`ParserState`](@ref), [`WriterState`](@ref).
+# Properties
+
+- `oas::Oasis`: The object we're trying to save.
+- `io::IOStream`: File we're saving to.
+- `buf::Vector{UInt8}`: We write to the file in batches, and temporarily store the output in
+  this buffer.
+- `bufsize::Int64`: Size of `buf`.
+- `pos::Int64`: Position in the buffer.
+
+See also [`ParserState`](@ref), [`CellParserState`](@ref).
 """
 mutable struct WriterState
-    # Not decided yet.
-    io::IOStream # Where you're saving to.
+    oas::Oasis # The object we're trying to save.
+    io::IOStream # File we're saving to.
     buf::Vector{UInt8} # An output buffer of some size, probably big.
-    # Is it worth separately storing bufsize? Remember we will call length(buf) for every byte...
     bufsize::Int64 # Length of buffer stored separately.
     pos::Int64 # Position in buffer.
-    mod::ModalVariables
 end
 
+WriterState(oas::Oasis, filename::AbstractString, bufsize::Integer) = WriterState(
+    oas, open(filename, "w"), Vector{UInt8}(undef, bufsize), bufsize, 1
+)
+
 WriterState(filename::AbstractString, bufsize::Integer) = WriterState(
-    open(filename, "w"), Vector{UInt8}(undef, bufsize), bufsize, 1, ModalVariables()
+    Oasis(), open(filename, "w"), Vector{UInt8}(undef, bufsize), bufsize, 1
 )

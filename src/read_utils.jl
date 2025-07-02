@@ -5,7 +5,7 @@ function read_or_modal(
     info_byte::UInt8,
     position::Int64
 ) where modal
-    if bit_is_nonzero(info_byte, position)
+    if bit_is_one(info_byte, position)
         v = reader(state)
         setproperty!(state.mod, modal, v)
         return v
@@ -26,13 +26,13 @@ function read_or_modal_xy(
         x = read_or_modal(state, read_signed_integer, Val(modalX), info_byte, position)
         y = read_or_modal(state, read_signed_integer, Val(modalY), info_byte, position + 1)
     else
-        if bit_is_nonzero(info_byte, position)
+        if bit_is_one(info_byte, position)
             x = read_signed_integer(state) + getproperty(state.mod, modalX)
             setproperty!(state.mod, modalX, x)
         else
             x = getproperty(state.mod, modalX)
         end
-        if bit_is_nonzero(info_byte, position + 1)
+        if bit_is_one(info_byte, position + 1)
             y = read_signed_integer(state) + getproperty(state.mod, modalY)
             setproperty!(state.mod, modalY, y)
         else
@@ -47,7 +47,7 @@ function read_repetition(
     info_byte::UInt8,
     position::Int64
 )
-    if bit_is_nonzero(info_byte, position)
+    if bit_is_one(info_byte, position)
         v = read_repetition(state)
         state.mod.repetition = v
         return v
@@ -61,7 +61,7 @@ function read_nrep(
     info_byte::UInt8,
     position::Int64
 )
-    if bit_is_nonzero(info_byte, position)
+    if bit_is_one(info_byte, position)
         v = read_nrep(state)
         state.mod.nrep = v
         return v
@@ -70,7 +70,7 @@ function read_nrep(
     end
 end
 
-function bit_is_nonzero(byte::UInt8, position::Integer)
+function bit_is_one(byte::UInt8, position::Integer)
     return isone(byte >> (8 - position) & 0x01)
 end
 
