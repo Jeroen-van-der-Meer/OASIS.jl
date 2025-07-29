@@ -53,6 +53,12 @@ function read_string(state)
     return String(s)
 end
 
+function read_symbol(state)
+    length = rui(state)
+    s = read_bytes(state, length)
+    return Symbol(s)
+end
+
 function read_1_delta(state, dir)
     # dir 0: east/west; dir 1: north/south
     mag = read_signed_integer(state)
@@ -142,7 +148,7 @@ end
 read_repetition_type_0(state) = state.mod.repetition
 read_repetition_type_1(state) = PointGridRange((0, 0), rui(state) + 2, rui(state) + 2, (rui(state), 0), (0, rui(state)))
 read_repetition_type_2(state) = PointGridRange((0, 0), rui(state) + 2, 1, (rui(state), 0), (1, 1))
-read_repetition_type_3(state) = PointGridRange((0, 0), 1, rui(state) + 2, (1, 1), (0, rui(state)))
+read_repetition_type_3(state) = PointGridRange((0, 0), rui(state) + 2, 1, (0, rui(state)), (1, 1))
 read_repetition_type_4(state) = collect_repetitions_x(state, rui(state) + 2)
 read_repetition_type_5(state) = collect_repetitions_x(state, rui(state) + 2; grid = signed(rui(state)))
 read_repetition_type_6(state) = collect_repetitions_y(state, rui(state) + 2)
@@ -303,7 +309,7 @@ function read_property_value(state)
     elseif type == 0x09
         return read_signed_integer(state)
     elseif 0x0a <= type <= 0x0c
-        return read_string(state)
+        return read_symbol(state)
     else
         return rui(state)
     end

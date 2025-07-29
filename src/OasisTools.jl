@@ -4,14 +4,23 @@ using CodecZlib
 using GeometryBasics
 import Mmap: mmap
 
+export add_layer!
 export Cell
+export cell_hierarchy
 export cell_name
 export cell_names
 export cell_number
+export CellHierarchy
 export CellPlacement
 export cells
+export Layer
+export layer
+export layers
 export LazyCell
+export load_all_cells!
+export load_cell
 export load_cell!
+export name
 export Oasis
 export oasisread
 export oasiswrite
@@ -19,10 +28,12 @@ export placements
 export plot_cell
 export plot_shape!
 export PointGridRange
+export roots
 export Shape
 export shapes
 export show_cells
 export show_shapes
+export update_roots!
 
 # Structs
 include("modal_variables.jl")

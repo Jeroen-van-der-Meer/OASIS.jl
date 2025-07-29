@@ -21,7 +21,7 @@ oasisread(filepath)
 ```
 
 ```
-OASIS file v1.0 with the following cell hierarchy:
+OASIS file with the following cell hierarchy:
 TOP
 ├─ BOTTOM2
 │  └─ ROCKBOTTOM
@@ -41,5 +41,5 @@ It returns an `Oasis` object, which contains a list of all the cells in your OAS
 - Properties are currently ignored.
 - Backwards-compatible extensions are not supported. You will get an error if your file contains any.
 - Curvilinear features are not yet supported.
-- It is not yet possible to write an OASIS file.
+- Writing OASIS files is only supported for lazy-loaded cells.
 - One day there will be functionality to visually display your layout &mdash; stay tuned.

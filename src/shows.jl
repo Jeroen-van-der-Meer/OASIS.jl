@@ -18,50 +18,67 @@ Obtain an overview of the cells in your OASIS objects.
   argument `maxdepth` is ignored.
 """
 function show_cells(
-    oas::Oasis,
-    cell_string::AbstractString = "";
+    oas::Oasis;
     maxdepth = 100,
     flat = false,
-    io = stdout
+    io = stdout,
+    roots = roots(oas)
 )
     if flat
-        if isempty(cell_string)
-            cell_numbers = keys(cells(oas))
-        else
-            cell_numbers = keys(placements(oas[cell_string]))
-        end
-        for cell_number in cell_numbers
-            println(io, cell_name(oas, cell_number))
+        for cell in oas.cells
+            println(io, cell.name)
         end
     else
-        cell_hierarchy = oas.hierarchy
-        if isempty(cell_string)
-            roots = cell_hierarchy.roots
-        else
-            roots = [cell_number(oas, cell_string)]
-        end
         _show_hierarchy(oas; maxdepth = maxdepth, io = io, roots = roots)
     end
 end
 
-function show_shapes(oas::Oasis; cell::AbstractString, maxdepth = 1, flat = false)
+function show_shapes(oas::Oasis; cell::Symbol, maxdepth = 1, flat = false)
     @error "Not implemented"
 end
 
 # Custom shows
 
 function Base.show(io::IO, oas::Oasis)
-    print(io, "OASIS file v", oas.metadata.version.major, ".", oas.metadata.version.minor, " ")
-    if isempty(oas.hierarchy.roots)
+    print(io, "OASIS file ")
+    rts = roots(oas)
+    if isempty(rts)
         print(io, "with unknown cell hierarchy")
     else
         print(io, "with the following cell hierarchy:\n")
-        show_cells(oas; maxdepth = 2, flat = false, io = io)
+        show_cells(oas; maxdepth = 2, flat = false, io = io, roots = rts)
+    end
+end
+
+function Base.show(io::IO, cell::Cell)
+    nplacements = length(cell.placements)
+    nshapes = length(cell.shapes)
+    print(io, "Cell $(cell.name) with $(nplacements) placement$(nplacements == 1 ? "" : "s") and $(nshapes) shape$(nshapes == 1 ? "" : "s")")
+end
+
+function Base.show(io::IO, cell::LazyCell)
+    print(io, "Lazy cell ")
+    print(io, cell.name)
+end
+
+function Base.show(io::IO, layer::Layer)
+    print(io, "$(layer.name) ($(layer.layerNumber)/$(layer.datatypeNumber))")
+end
+
+function Base.show(io::IO, interval::Interval)
+    if interval.low == interval.high
+        print(io, interval.low)
+    else
+        if interval.high == typemax(UInt64)
+            print(io, "[$(interval.low),∞)")
+        else
+            print(io, "[$(interval.low),$(interval.high)]")
+        end
     end
 end
 
 function Base.show(io::IO, placement::CellPlacement)
-    print(io, "Placement of cell $(placement.nameNumber) at ($(placement.location[1]), $(placement.location[2]))")
+    print(io, "Placement of cell $(placement.cellName) at ($(placement.location[1]), $(placement.location[2]))")
     repetition = !isnothing(placement.repetition)
     if repetition
         nrep = length(placement.repetition)
@@ -93,25 +110,24 @@ end
 
 function _show_hierarchy(
     oas::Oasis;
-    cell_hierarchy = oas.hierarchy,
-    maxdepth = 100, io = stdout, count = 1,
-    current_depth = 0, prefix = "", last = true, roots = cell_hierarchy.roots
+    maxdepth = 100, io = stdout,
+    current_depth = 0, prefix = "", last = true,
+    roots = roots(oas)
 )
-    for (i, root) in enumerate(roots)
+    for (i, root_name) in enumerate(roots)
         if current_depth == 0
             i > 1 && print('\n')
-            print(io, prefix, get_reference(oas.metadata.source, root, oas.references.cellNames))
+            print(io, prefix, root_name)
             new_prefix = prefix
         else
             print('\n')
             connector = last ? "└─ " : "├─ "
-            print(io, prefix, connector, get_reference(oas.metadata.source, root, oas.references.cellNames))
-            # If a cell occurs N times with N > 1, we annotate the cell name with "(N×)".
-            count > 1 && print(io, " ($(count)×)")
+            print(io, prefix, connector, root_name)
             new_prefix = prefix * (last ? "   " : "│  ")
         end
-        if haskey(cell_hierarchy.hierarchy, root)
-            children = cell_hierarchy.hierarchy[root]
+        root_cell = oas[root_name]
+        if root_cell isa Cell
+            children = unique([p.cellName for p in root_cell.placements])
             nunique_children = length(children)
             # If `maxdepth` is reached, we check whether the current element has any further children.
             # Rather than printing them, we print an ellipsis (⋯) to indicate that there are children.
@@ -121,22 +137,19 @@ function _show_hierarchy(
                 end
                 return
             end
-            
             for (i, child) in enumerate(children)
                 child_is_last = i == nunique_children
                 _show_hierarchy(
                     oas;
-                    cell_hierarchy = cell_hierarchy,
                     maxdepth = maxdepth,
                     io = io,
-                    count = count,
                     roots = [child],
                     current_depth = current_depth + 1,
                     prefix = new_prefix,
                     last = child_is_last
                 )
             end
-        else
+        elseif root_cell isa LazyCell
             print(io, '\n', new_prefix, "└─ ?")
         end
     end

@@ -1,11 +1,10 @@
-function read_start(state::ParserState)
+function read_start(state::FileParserState)
     version = VersionNumber(read_string(state))
-    if version !== v"1.0.0"
+    if version != v"1.0.0"
         @warn "Unknown file version detected. Attempting to read anyway."
     end
-    state.oas.metadata.version = version
     unit = read_real(state) # Convention: Grid steps per micron.
-    state.oas.metadata.unit = 1e6 / unit
+    state.metadata.unit = 1e6 / unit
     offset_flag = rui(state)
     if iszero(offset_flag)
         # We ignore the 12 integers corresponding to the table offset structure.
@@ -15,58 +14,69 @@ function read_start(state::ParserState)
     end
 end
 
-function read_cellname_impl(state::ParserState)
-    cellname = read_string(state)
-    cellname_number = length(state.oas.references.cellNames)
-    reference = NumericReference(state.oas.metadata.source, cellname, cellname_number)
-    push!(state.oas.references.cellNames, reference)
+function read_cellname_impl(state::FileParserState)
+    cellname = read_symbol(state)
+    cellname_number = length(state.cellnameReferences)
+    state.cellnameReferences[cellname_number] = cellname
 end
 
-function read_cellname_ref(state::ParserState)
-    cellname = read_string(state)
+function read_cellname_ref(state::FileParserState)
+    cellname = read_symbol(state)
     cellname_number = rui(state)
-    reference = NumericReference(state.oas.metadata.source, cellname, cellname_number)
-    push!(state.oas.references.cellNames, reference)
+    state.cellnameReferences[cellname_number] = cellname
 end
 
-function read_textstring_impl(state::ParserState)
-    textstring = read_string(state)
-    textstring_number = length(state.oas.references.textStrings)
-    reference = NumericReference(state.oas.metadata.source, textstring, textstring_number)
-    push!(state.oas.references.textStrings, reference)
+function read_textstring_impl(state::FileParserState)
+    textstring = read_symbol(state)
+    textstring_number = length(state.textstringReferences)
+    state.textstringReferences[textstring_number] = textstring
 end
 
-function read_textstring_ref(state::ParserState)
-    textstring = read_string(state)
+function read_textstring_ref(state::FileParserState)
+    textstring = read_symbol(state)
     textstring_number = rui(state)
-    reference = NumericReference(state.oas.metadata.source, textstring, textstring_number)
-    push!(state.oas.references.textStrings, reference)
+    state.textstringReferences[textstring_number] = textstring
 end
 
-function read_layername(state::ParserState)
-    layername = read_string(state)
+function read_propname_impl(state::FileParserState)
+    propname = read_symbol(state)
+    propname_number = length(state.propnameReferences)
+    state.propnameReferences[propname_number] = propname
+end
+
+function read_propname_ref(state::FileParserState)
+    propname = read_symbol(state)
+    propname_number = rui(state)
+    state.propnameReferences[propname_number] = propname
+end
+
+function read_propstring_impl(state::FileParserState)
+    propstring = read_symbol(state)
+    propstring_number = length(state.propstringReferences)
+    state.propstringReferences[propstring_number] = propstring
+end
+
+function read_propstring_ref(state::FileParserState)
+    propstring = read_symbol(state)
+    propstring_number = rui(state)
+    state.propstringReferences[propstring_number] = propstring
+end
+
+function read_layername(state::FileParserState)
+    layername = read_symbol(state)
     layer_interval = read_interval(state)
     datatype_interval = read_interval(state)
-    layer_reference = LayerReference(layername, layer_interval, datatype_interval)
-    push!(state.oas.references.layerNames, layer_reference)
-end
-
-function read_textlayername(state::ParserState)
-    layername = read_string(state)
-    layer_interval = read_interval(state)
-    datatype_interval = read_interval(state)
-    layer_reference = LayerReference(layername, layer_interval, datatype_interval)
-    push!(state.oas.references.textLayerNames, layer_reference)
-end
-
-function read_cell(state::ParserState, cellname_number::UInt64)
-    # FIXME: Possible type instability problems.
-    if state.lazy
-        cell_state = LazyCellParserState(state)
-        start_byte = cell_state.pos
-    else
-        cell_state = CellParserState(state)
+    layer = Layer(layername, layer_interval, datatype_interval)
+    if !(layer in state.layers)
+        # FIXME: Add some logic to deal with the possibility that different layers have
+        # overlapping layer and datatype intervals.
+        push!(state.layers, layer)
     end
+end
+
+function read_cell(state::FileParserState, name_or_number::Union{Symbol, UInt64})
+    cell_state = LazyCellParserState(state)
+    start_byte = cell_state.pos
     while true
         current_pos = cell_state.pos
         record_type = read_byte(cell_state)
@@ -78,30 +88,20 @@ function read_cell(state::ParserState, cellname_number::UInt64)
         end
         read_record(record_type, cell_state)
     end
-    if state.lazy
-        end_byte = cell_state.pos - 1
-        cell = LazyCell(state.oas.metadata.source, @view state.buf[start_byte:end_byte])
-    else
-        cell = Cell(state.oas.metadata.source, cell_state.shapes, cell_state.placements)
-        state.oas.hierarchy.hierarchy[cellname_number] = unique(p.nameNumber for p in cell.placements)
-    end
-    state.oas.cells[cellname_number] = cell
+    end_byte = cell_state.pos - 1
+    cell = PreprocessedCell(name_or_number, @view state.buf[start_byte:end_byte])
+    push!(state.cells, cell)
     state.pos = cell_state.pos
 end
 
-function read_cell_ref(state::ParserState)
+function read_cell_ref(state::FileParserState)
     cellname_number = rui(state)
     read_cell(state, cellname_number)
 end
 
-function read_cell_str(state::ParserState)
-    cellname = read_string(state)
-    cellname_number = _get_or_make_reference(
-        state.oas.metadata.source,
-        state.oas.references.cellNames,
-        cellname
-    )
-    read_cell(state, cellname_number)
+function read_cell_str(state::FileParserState)
+    cellname = read_symbol(state)
+    read_cell(state, cellname)
 end
 
 function read_xyabsolute(state::CellParserState)
@@ -119,28 +119,22 @@ function read_placement(state::CellParserState)
         cellname_as_ref = bit_is_one(info_byte, 2)
         if cellname_as_ref
             cellname_number = rui(state)
+            cellname = state.cellnameReferences[cellname_number]
         else
-            cellname = read_string(state)
-            cellname_number = _get_or_make_reference(
-                state.oas.metadata.source,
-                state.oas.references.cellNames,
-                cellname
-            )
+            cellname = read_symbol(state)
         end
-        # Update the modal variable. We choose to always save the reference number instead of
-        # the string.
-        state.mod.placementCell = cellname_number
+        # Update the modal variable.
+        state.mod.placementCell = cellname
     else
-        cellname_number = state.mod.placementCell
+        cellname = state.mod.placementCell
     end
     x, y = read_or_modal_xy(state, Val(:placementX), Val(:placementY), info_byte, 3)
     location = Point{2, Int64}(x, y)
     rotation = ((info_byte >> 1) & 0x03) * 90
     repetition = read_repetition(state, info_byte, 5)
     is_flipped = bit_is_one(info_byte, 8)
-    placement = CellPlacement(cellname_number, location, rotation, 1.0, is_flipped, repetition)
+    placement = CellPlacement(cellname, location, rotation, 1.0, is_flipped, repetition)
     push!(state.placements, placement)
-
 end
 
 function read_placement_mag_angle(state::CellParserState)
@@ -150,21 +144,14 @@ function read_placement_mag_angle(state::CellParserState)
         cellname_as_ref = bit_is_one(info_byte, 2)
         if cellname_as_ref
             cellname_number = rui(state)
+            cellname = state.cellnameReferences[cellname_number]
         else
-            cellname = read_string(state)
-            cellname_number = _get_or_make_reference(
-                state.oas.metadata.source,
-                state.oas.references.cellNames,
-                cellname
-            )
-            # If a string is used to denote the cellname, find the corresponding reference. If
-            # no such reference exists (yet?), create a random one ourselves.
+            cellname = read_symbol(state)
         end
-        # Update the modal variable. We choose to always save the reference number instead of
-        # the string.
-        state.mod.placementCell = cellname_number
+        # Update the modal variable.
+        state.mod.placementCell = cellname
     else
-        cellname_number = state.mod.placementCell
+        cellname = state.mod.placementCell
     end
     if bit_is_one(info_byte, 6)
         magnification = read_real(state)
@@ -180,7 +167,7 @@ function read_placement_mag_angle(state::CellParserState)
     location = Point{2, Int64}(x, y)
     repetition = read_repetition(state, info_byte, 5)
     is_flipped = bit_is_one(info_byte, 8)
-    placement = CellPlacement(cellname_number, location, rotation, magnification, is_flipped, repetition)
+    placement = CellPlacement(cellname, location, rotation, magnification, is_flipped, repetition)
     push!(state.placements, placement)
 end
 
@@ -191,26 +178,22 @@ function read_text(state::CellParserState)
         text_as_ref = bit_is_one(info_byte, 3)
         if text_as_ref
             text_number = rui(state)
+            textstring = state.textstringReferences[text_number]
         else
-            text = read_string(state)
-            text_number = _get_or_make_reference(
-                state.oas.metadata.source,
-                state.oas.references.textStrings,
-                text
-            )
+            textstring = read_symbol(state)
         end
         # Update the modal variable. We choose to always save the reference number instead of
         # the string.
-        state.mod.textString = text_number
+        state.mod.textString = textstring
     else
-        text_number = state.mod.textString
+        textstring = state.mod.textString
     end
     textlayer_number = read_or_modal(state, rui, Val(:textlayer), info_byte, 8)
     texttype_number = read_or_modal(state, rui, Val(:texttype), info_byte, 7)
     x, y = read_or_modal_xy(state, Val(:textX), Val(:textY), info_byte, 4)
     repetition = read_repetition(state, info_byte, 6)
 
-    text = Text(text_number, Point{2, Int64}(x, y), repetition)
+    text = Text(textstring, Point{2, Int64}(x, y), repetition)
     shape = Shape(text, textlayer_number, texttype_number, repetition)
     push!(state.shapes, shape)
 end
@@ -509,36 +492,33 @@ function read_circle(state::CellParserState)
     push!(state.shapes, shape)
 end
 
-function read_property_if_S_TOP_CELL(state::ParserState)
-    # We ignore all properties except for making a half-assed attempt at finding the S_TOP_CELL
-    # property.
+function read_property(state::FileParserState)
     info_byte = read_byte(state)
-    if bit_is_one(info_byte, 6)
-        if bit_is_one(info_byte, 7)
-            skip_integer(state)
+    propname_explicit = bit_is_one(info_byte, 6)
+    if propname_explicit
+        propname_as_ref = bit_is_one(info_byte, 7)
+        if propname_as_ref
+            propname = rui(state)
         else
-            s = read_string(state)
-            if s == "S_TOP_CELL"
-                # S_TOP_CELL has a single string value.
-                top_cell_name = read_property_value(state)
-                top_cell_number = get_reference(
-                    top_cell_name,
-                    state.oas.references.cellNames
-                )
-                push!(state.oas.hierarchy.roots, top_cell_number)
-                return
-            end
+            propname = read_symbol(state)
         end
+        state.mod.lastPropertyName = propname
+    else
+        propname = state.mod.lastPropertyName
     end
-    if !bit_is_one(info_byte, 5)
+    propvalue_implicit = bit_is_one(info_byte, 5)
+    if propvalue_implicit
+        propvalues = state.mod.lastValueList
+    else
         number_of_values = info_byte >> 4
         if number_of_values == 0x0f
             number_of_values = rui(state)
         end
-        for _ in 1:number_of_values
-            skip_property_value(state)
-        end
+        propvalues = [read_property_value(state) for _ in 1:number_of_values]
+        state.mod.lastValueList = propvalues
     end
+    file_property = FileProperty(propname, propvalues)
+    push!(state.metadata.fileProperties, file_property)
 end
 
 function read_cblock(state::AbstractParserState)
@@ -560,22 +540,22 @@ function read_cblock(state::AbstractParserState)
     end
 end
 
-function read_record(record_type::UInt8, state::ParserState)
+function read_record(record_type::UInt8, state::FileParserState)
     # Switch statements have been shuffled corresponding to how common each record type is.
     record_type == 4  && return read_cellname_ref(state) # CELLNAME
     record_type == 13 && return read_cell_ref(state) # CELL
     record_type == 11 && return read_layername(state) # LAYERNAME
-    record_type == 12 && return read_textlayername(state) # LAYERNAME
+    record_type == 12 && return read_layername(state) # LAYERNAME
     record_type == 34 && return read_cblock(state) # CBLOCK
     record_type == 3  && return read_cellname_impl(state) # CELLNAME
     record_type == 5  && return read_textstring_impl(state) # TEXTSTRING
     record_type == 6  && return read_textstring_ref(state) # TEXTSTRING
-    record_type == 7  && return skip_propname_impl(state) # PROPNAME
-    record_type == 8  && return skip_propname_ref(state) # PROPNAME
-    record_type == 9  && return skip_propstring_impl(state) # PROPSTRING
-    record_type == 10 && return skip_propstring_ref(state) # PROPSTRING
+    record_type == 7  && return read_propname_impl(state) # PROPNAME
+    record_type == 8  && return read_propname_ref(state) # PROPNAME
+    record_type == 9  && return read_propstring_impl(state) # PROPSTRING
+    record_type == 10 && return read_propstring_ref(state) # PROPSTRING
     record_type == 14 && return read_cell_str(state) # CELL
-    record_type == 28 && return skip_property(state) # PROPERTY
+    record_type == 28 && return read_property(state) # PROPERTY
     record_type == 29 && return skip_record(state) # PROPERTY
     record_type == 0  && return skip_record(state) # PAD
     record_type == 1  && return read_start(state) # START
@@ -606,6 +586,7 @@ function read_record(record_type::UInt8, state::CellParserState)
     record_type == 0  && return skip_record(state) # PAD
     record_type == 32 && error("XELEMENT record encountered; not implemented yet") # XELEMENT
     record_type == 33 && error("XGEOMETRY record encountered; not implemented yet") # XGEOMETRY
+    error("No suitable record type found; file may be corrupted")
 end
 
 function read_record(record_type::UInt8, state::LazyCellParserState)

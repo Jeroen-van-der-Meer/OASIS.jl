@@ -7,14 +7,14 @@
         @test oas isa Oasis
         ncell = length(oas.cells)
         @test ncell == 1
-        top_cell = oas.cells[0]
-        cellname = OasisTools.get_reference(oas.metadata.source, 0, oas.references.cellNames)
-        @test cellname == "TOP"
-        subcells = top_cell.placements
+        @test cell_names(oas) == [:TOP]
+        top_cell = oas[:TOP]
+        @test top_cell.name == :TOP
+        subcells = placements(top_cell)
         @test isempty(subcells)
-        shapes = top_cell.shapes
-        @test length(shapes) == 1
-        polygon = top_cell.shapes[1].shape
+        shps = shapes(top_cell)
+        @test length(shps) == 1
+        polygon = shps[1].shape
         @test polygon isa Polygon
         @test polygon.exterior == [
             Point{2, Int64}(-1000, -1000), Point{2, Int64}(-1000, 0),
@@ -29,28 +29,23 @@
         @test oas isa Oasis
         ncell = length(oas.cells)
         @test ncell == 2
-        bottom_cell_number = cell_number(oas, "BOTTOM")
-        bottom_cell = oas.cells[bottom_cell_number]
-        cellname = OasisTools.get_reference(oas.metadata.source, bottom_cell_number, oas.references.cellNames)
-        @test cellname == "BOTTOM"
+        bottom_cell = oas[:BOTTOM]
+        @test bottom_cell.name == :BOTTOM
         @test length(bottom_cell.shapes) == 1
         rectangle = bottom_cell.shapes[1]
-        layer_number = rectangle.layerNumber
-        datatype_number = rectangle.datatypeNumber
-        layername = OasisTools.get_reference(layer_number, datatype_number, oas.references.layerNames)
-        @test layername == "TOP"
+        lyr = layer(oas, rectangle)
+        layername = lyr.name
+        @test layername == :TOP
         rectangle_shape = rectangle.shape
         @test rectangle_shape isa Rect{2, Int64}
         @test rectangle_shape == Rect{2, Int64}(
             Point{2, Int64}(-190, 2870),
             Point{2, Int64}(10, 10)
         )
-        top_cell_number = cell_number(oas, "TOP")
-        @test top_cell_number == 0
-        top_cell = oas.cells[top_cell_number]
-        cellname = OasisTools.get_reference(oas.metadata.source, top_cell_number, oas.references.cellNames)
-        @test cellname == "TOP"
-        top_shape = shapes(oas["TOP"])[1]
+        @test roots(oas) == [:TOP]
+        top_cell = oas[:TOP]
+        @test top_cell.name == :TOP
+        top_shape = shapes(top_cell)[1]
         @test top_shape isa Shape{Rect{2, Int64}}
         s = Suppressor.@capture_out Base.show(top_shape)
         # Note that the coordinates do not account for the repetition.
@@ -60,6 +55,8 @@
         # There are two placements in the top cell rather than one. Underneath the 6x5 grid of
         # rectangles, there's another rectangle.
         bottom_cell_placement = p[1]
+        s = Suppressor.@capture_out Base.show(bottom_cell_placement)
+        @test s == "Placement of cell BOTTOM at (-520, 2200) (30×)"
         @test bottom_cell_placement.location == Point{2, Int64}(-520, 2200)
         # FIXME: Check the placement is correct, esp. the rotation
         @test bottom_cell_placement.rotation == 180
@@ -78,8 +75,8 @@
         @test circle isa Shape{Polygon{2, Int64}}
         text_cell = oas["TOP"]
         text = text_cell.shapes[1]
-        text_string = OasisTools.get_reference(oas.metadata.source, text.shape.textNumber, oas.references.textStrings)
-        @test text_string == "This is not a circle"
+        text_string = text.shape.text
+        @test text_string == Symbol("This is not a circle")
     end
     @testset "Paths" begin
         # Contains: Some paths. It includes one with rounded ends. Weirdly enough, klayout
@@ -93,28 +90,28 @@
         top_cell = oas["TOP"]
         nplacement = length(top_cell.placements)
         @test nplacement == 0
-        shapes = [s.shape for s in top_cell.shapes]
-        @test length(shapes) == 6 # Four paths and two circles for the rounded path
-        path_1 = shapes[1]
+        shps = [s.shape for s in top_cell.shapes]
+        @test length(shps) == 6 # Four paths and two circles for the rounded path
+        path_1 = shps[1]
         @test path_1.points == Point{2, Int64}[(-508, 268), (-253, 22), (-342, 190), (-157, 176)]
         @test path_1.width == 100
-        path_2 = shapes[2]
+        path_2 = shps[2]
         @test path_2.points == Point{2, Int64}[(-263, 431), (-116, 420), (-228, 315), (-182, 482)]
         @test path_2.width == 50
         # Third path is a rounded path which klayout saves using CIRCLE records at both ends.
-        path_3 = shapes[3]
+        path_3 = shps[3]
         @test path_3.points == Point{2, Int64}[(-343, 273), (-386, 294), (-351, 303)]
         @test path_3.width == 10
-        start_circle = shapes[4]
+        start_circle = shps[4]
         @test start_circle.center == Point{2, Int64}(-343, 273)
         @test start_circle.r == 5
-        end_circle = shapes[5]
+        end_circle = shps[5]
         @test end_circle.center == Point{2, Int64}(-351, 303)
         @test end_circle.r == 5
         # Fourth path is subject to change; due to the nonzero starting offset, its starting
         # point is actually a fraction of the database unit. As it stands, a rounding takes
         # place.
-        path_4 = shapes[6]
+        path_4 = shps[6]
         @test path_4.points == Point{2, Int64}[(-257, 236), (-255, 238), (-254, 237)]
         @test path_4.width == 2
     end
@@ -126,7 +123,7 @@
         oas = oasisread(filepath)
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with the following cell hierarchy:
+OASIS file with the following cell hierarchy:
 TOP
 ├─ BOTTOM2
 │  └─ ROCKBOTTOM
@@ -139,9 +136,9 @@ TOP
         s = Suppressor.@capture_out Base.show(oas["ROCKBOTTOM"].shapes[1])
         @test s == "Polygon in layer (1/0) at (1, 0)"
         s = Suppressor.@capture_out Base.show(oas["BOTTOM2"].placements[1])
-        @test s == "Placement of cell 6 at (1, 0)"
+        @test s == "Placement of cell ROCKBOTTOM at (1, 0)"
         s = Suppressor.@capture_out Base.show(oas["MIDDLE2"].placements[1])
-        @test s == "Placement of cell 3 at (-5, -3) (2×)"
+        @test s == "Placement of cell BOTTOM at (-5, -3) (2×)"
         bottom = oas["BOTTOM"]
         @test length(bottom.shapes) == 1
         bottom2 = oas["BOTTOM2"]
@@ -220,11 +217,11 @@ TOP
         @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with the following cell hierarchy:
-TOP
-OTHERTOP"""
-        s = Suppressor.@capture_out show_cells(oas, "TOP")
-        @test s == "TOP"
+OASIS file with the following cell hierarchy:
+OTHERTOP
+TOP"""
+        s = Suppressor.@capture_out Base.show(oas[:TOP])
+        @test s == "Cell TOP with 0 placements and 1 shape"
     end
     @testset "Flipped" begin
         # Contains: A cell placement which is flipped around the x-axis.
@@ -251,7 +248,6 @@ end
         cell = oas["TOP"]
         @test cell isa LazyCell
         @test cell.bytes[1] == 21 # Byte corresponding to start of POLYGON record
-        @test endswith(String(cell.source), ".oas")
         load_cell!(oas, "TOP")
         cell = oas["TOP"]
         @test cell isa Cell
@@ -263,7 +259,9 @@ end
         @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with unknown cell hierarchy"""
+OASIS file with the following cell hierarchy:
+TOP
+└─ ?"""
         top_cell = oas["TOP"]
         @test top_cell.bytes[1] == 17 # First byte of a PLACEMENT record
         bottom_cell = oas["BOTTOM"]
@@ -303,7 +301,11 @@ OASIS file v1.0 with unknown cell hierarchy"""
         @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with unknown cell hierarchy"""
+OASIS file with the following cell hierarchy:
+OTHERTOP
+└─ ?
+TOP
+└─ ?"""
         @test oas["TOP"] isa LazyCell
         @test oas["OTHERTOP"] isa LazyCell
     end

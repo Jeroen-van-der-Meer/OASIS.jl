@@ -17,23 +17,21 @@ julia> using OasisTools;
 julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
 
 julia> oas = oasisread(filename)
-OASIS file v1.0 with the following cell hierarchy:
+OASIS file with the following cell hierarchy:
 TOP
 ```
 
 # Caveats
 
 - There *will* be bugs.
-- Properties are currently ignored.
+- Properties are not stored.
 - Backwards-compatible extensions are not supported. You will get an error if your file contains
   any.
 - Curvilinear features are not yet supported.
 """
 function oasisread(filename::AbstractString; lazy::Bool = false)
     buf = mmap(filename)
-    state = ParserState(buf; lazy = lazy)
-    state.oas.metadata.source = Symbol(filename)
-
+    state = FileParserState(buf)
     header = read_bytes(state, 13)
     @assert all(header .== MAGIC_BYTES) "Wrong header bytes; likely not an OASIS file."
 
@@ -43,7 +41,71 @@ function oasisread(filename::AbstractString; lazy::Bool = false)
         read_record(record_type, state)
     end
 
-    find_root_cell(state)
+    if lazy
+        # In case of lazy loading, make a best-effort attempt at finding the root cells by
+        # looking for the S_TOP_CELL property. (In case of non-lazy loading, we are guaranteed
+        # to find the root cells by using the placement information.)
+        find_root_cells!(state)
+    end
 
-    return state.oas
+    lazy_cells = process_cells(state)
+    oas = Oasis(lazy_cells, state.layers)
+    
+    if !lazy
+        # In case of non-lazy loading, parse each of the lazy-loaded cells and replace them with
+        # ordinary cells.
+        load_all_cells!(oas)
+        # Use the recorded cell placements to find the root cells.
+        update_roots!(oas)
+    end
+    
+    return oas
+end
+
+function process_cells(state::FileParserState)
+    lazy_cells = Vector{LazyCell}(undef, length(state.cells))
+
+    for (i, preprocessed_cell) in enumerate(state.cells)
+        if preprocessed_cell.nameOrNumber isa UInt64
+            cell_name = state.cellnameReferences[preprocessed_cell.nameOrNumber]
+        else
+            cell_name = preprocessed_cell.nameOrNumber
+        end
+
+        is_root = cell_name in state.metadata.roots
+        lazy_cells[i] = LazyCell(
+            cell_name,
+            preprocessed_cell.bytes,
+            state.cellnameReferences,
+            state.textstringReferences,
+            state.metadata.unit,
+            is_root
+        )
+    end
+
+    return lazy_cells
+end
+
+function find_root_cells!(state::FileParserState)
+    # Look for S_TOP_CELL property and store top cell in parser metadata. We can only do this
+    # after parsing the entire file because both the the value of S_TOP_CELL as well as the word
+    # 'S_TOP_CELL' itself can be stored numerically, and the record that tells you what the
+    # corresponding string should be can occur anywhere in the entire file.
+    for file_property in state.metadata.fileProperties
+        propname_or_number = file_property.nameOrNumber
+        if propname_or_number isa UInt64
+            propname = state.propnameReferences[propname_or_number]
+        else
+            propname = propname_or_number
+        end
+        if propname == :S_TOP_CELL
+            cellname_or_number = first(file_property.valueList)
+            if cellname_or_number isa UInt64
+                cellname = state.propstringReferences[cellname_or_number]
+            else
+                cellname = cellname_or_number
+            end
+            push!(state.metadata.roots, cellname)
+        end
+    end
 end

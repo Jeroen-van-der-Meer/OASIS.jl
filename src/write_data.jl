@@ -52,6 +52,7 @@ function write_real(state, real::Real)
     end
 end
 
+write_a_string(state, symbol::Symbol) = write_a_string(state, String(symbol))
 function write_a_string(state, string::AbstractString) # a-string
     bytes = codeunits(string)
     nbytes = length(bytes)
@@ -62,6 +63,7 @@ function write_a_string(state, string::AbstractString) # a-string
     write_bytes(state, bytes, nbytes)
 end
 
+write_bn_string(state, symbol::Symbol) = write_bn_string(state, String(symbol))
 function write_bn_string(state, string::AbstractString) # b-string and n-string
     bytes = codeunits(string)
     nbytes = length(bytes)
@@ -70,6 +72,78 @@ function write_bn_string(state, string::AbstractString) # b-string and n-string
     end
     wui(state, nbytes)
     write_bytes(state, bytes, nbytes)
+end
+
+function write_g_delta(state, value::Point{2, Int64})
+    # The last bit of the first byte of a g-delta indicates that it will consist of a pair of
+    # unsigned integers. We encode this bit by shifting the first value of the g-delta to the
+    # left. This is why we store 2x + 1.
+    x = value[1]
+    x >= 0 ? wui(state, 4x + 1) : wui(state, -4x + 3)
+    y = value[2]
+    y >= 0 ? wui(state, 2y) : wui(state, -2y + 1)
+end
+
+function write_repetition_type_0(state)
+    write_byte(state, 0)
+end
+
+function write_repetition_type_8(state, value::PointGridRange)
+    write_byte(state, 8)
+    wui(state, value.nstepx - 2)
+    wui(state, value.nstepy - 2)
+    write_g_delta(state, value.stepx)
+    write_g_delta(state, value.stepy)
+end
+
+function write_repetition_type_9(state, value::PointGridRange)
+    write_byte(state, 9)
+    if value.nstepx == 1
+        wui(state, value.nstepy - 2)
+        write_g_delta(state, value.stepy)
+    elseif value.nstepy == 1
+        wui(state, value.nstepx - 2)
+        write_g_delta(state, value.stepx)
+    else
+        error("Cannot store PointGridRange as repetition of specified type")
+    end
+end
+
+function write_repetition_type_10(state, value::Vector{Point{2, Int64}})
+    write_byte(state, 10)
+    nrep = length(value)
+    wui(state, nrep - 2)
+    @inbounds for i = 2:nrep
+        write_g_delta(state, value[i] - value[i - 1])
+    end
+end
+
+function write_repetition(state, value::PointGridRange)
+    if value == state.mod.repetition
+        write_repetition_type_0(state)
+    elseif (value.nstepx == 1) || (value.nstepy == 1)
+        write_repetition_type_9(state, value)
+        state.mod.repetition = value
+    else
+        write_repetition_type_8(state, value)
+        state.mod.repetition = value
+    end
+end
+
+function write_repetition(state, value::Vector{Point{2, Int64}})
+    if value == state.mod.repetition
+        write_repetition_type_0(state)
+    else
+        write_repetition_type_10(state, value)
+        state.mod.repetition = value
+    end
+end
+
+function write_property_value(state, value::Symbol)
+    # Warning: We're storing the property value as an n-string because that's what S_TOP_CELL
+    # expects. That said, other properties may require an a-string or b-string instead.
+    write_byte(state, 0x0c)
+    write_bn_string(state, value)
 end
 
 function write_interval_type_3(state, interval)

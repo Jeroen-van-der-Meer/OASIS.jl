@@ -4,6 +4,13 @@ function read_and_reset(state, nbytes::Integer)
     return l
 end
 
+function write_and_read(write_function, read_function, value; reader_type = FileParserState)
+    writer_state = OasisTools.WriterState("temp", 1024)
+    write_function(writer_state, value)
+    reader_state = reader_type(writer_state.buf)
+    @test read_function(reader_state) == value
+end
+
 @testset "Write data" begin
     @testset "Write bytes" begin
         state = OasisTools.WriterState("temp", 16)
@@ -18,64 +25,56 @@ end
         @test state.pos == 16
     end
     @testset "Write unsigned integers" begin
-        state = OasisTools.WriterState("temp", 1024 * 1024)
-        OasisTools.wui(state, 0)
-        @test read_and_reset(state, 1) == [0x00]
-        OasisTools.wui(state, 127)
-        @test read_and_reset(state, 1) == [0x7f]
-        OasisTools.wui(state, 128)
-        @test read_and_reset(state, 2) == [0x80, 0x01]
-        OasisTools.wui(state, 16383)
-        @test read_and_reset(state, 2) == [0xff, 0x7f]
-        OasisTools.wui(state, 16384)
-        @test read_and_reset(state, 3) == [0x80, 0x80, 0x01]
+        write_and_read(OasisTools.wui, OasisTools.rui, 0)
+        write_and_read(OasisTools.wui, OasisTools.rui, 127)
+        write_and_read(OasisTools.wui, OasisTools.rui, 128)
+        write_and_read(OasisTools.wui, OasisTools.rui, 16383)
+        write_and_read(OasisTools.wui, OasisTools.rui, 16384)
     end
     @testset "Write signed integers" begin
-        state = OasisTools.WriterState("temp", 1024 * 1024)
-        OasisTools.write_signed_integer(state, 0)
-        @test read_and_reset(state, 1) == [0x00]
-        OasisTools.write_signed_integer(state, 1)
-        @test read_and_reset(state, 1) == [0x02]
-        OasisTools.write_signed_integer(state, -1)
-        @test read_and_reset(state, 1) == [0x03]
-        OasisTools.write_signed_integer(state, 63)
-        @test read_and_reset(state, 1) == [0x7e]
-        OasisTools.write_signed_integer(state, -64)
-        @test read_and_reset(state, 2) == [0x81, 0x01]
-        OasisTools.write_signed_integer(state, 8191)
-        @test read_and_reset(state, 2) == [0xfe, 0x7f]
-        OasisTools.write_signed_integer(state, -8192)
-        @test read_and_reset(state, 3) == [0x81, 0x80, 0x01]
+        write_and_read(OasisTools.write_signed_integer, OasisTools.read_signed_integer, 0)
+        write_and_read(OasisTools.write_signed_integer, OasisTools.read_signed_integer, 1)
+        write_and_read(OasisTools.write_signed_integer, OasisTools.read_signed_integer, -1)
+        write_and_read(OasisTools.write_signed_integer, OasisTools.read_signed_integer, 63)
+        write_and_read(OasisTools.write_signed_integer, OasisTools.read_signed_integer, -64)
+        write_and_read(OasisTools.write_signed_integer, OasisTools.read_signed_integer, 8191)
+        write_and_read(OasisTools.write_signed_integer, OasisTools.read_signed_integer, -8192)
     end
     @testset "Write reals" begin
-        state = OasisTools.WriterState("temp", 1024 * 1024)
-        OasisTools.write_real(state, 0.0)
-        @test read_and_reset(state, 2) == [0x00, 0x00]
-        OasisTools.write_real(state, 1.0)
-        @test read_and_reset(state, 2) == [0x00, 0x01]
-        OasisTools.write_real(state, -1.0)
-        @test read_and_reset(state, 2) == [0x01, 0x01]
-        OasisTools.write_real(state, -2/13)
-        @test read_and_reset(state, 9) == [0x07, 0x14, 0x3b, 0xb1, 0x13, 0x3b, 0xb1, 0xc3, 0xbf]
+        write_and_read(OasisTools.write_real, OasisTools.read_real, 0.0)
+        write_and_read(OasisTools.write_real, OasisTools.read_real, 1.0)
+        write_and_read(OasisTools.write_real, OasisTools.read_real, -1.0)
+        write_and_read(OasisTools.write_real, OasisTools.read_real, -2/13)
     end
     @testset "Write strings" begin
-        state = OasisTools.WriterState("temp", 1024 * 1024)
-        OasisTools.write_bn_string(state, "abc")
-        @test read_and_reset(state, 4) == [0x03, 0x61, 0x62, 0x63]
-        OasisTools.write_bn_string(state, "")
-        @test read_and_reset(state, 1) == [0x00]
+        write_and_read(OasisTools.write_bn_string, OasisTools.read_string, "abc")
+        write_and_read(OasisTools.write_bn_string, OasisTools.read_string, "")
         @test_logs (
             :warn,
             "Non-printable ASCII characters detected. Other software may not be able to read your output file."
-        ) OasisTools.write_bn_string(state, "↑")
+        ) OasisTools.write_bn_string(OasisTools.WriterState("temp", 1024), "↑")
+    end
+    @testset "Write g-deltas" begin
+        write_and_read(OasisTools.write_g_delta, OasisTools.read_g_delta, Point{2, Int64}(122, 61))
+        write_and_read(OasisTools.write_g_delta, OasisTools.read_g_delta, Point{2, Int64}(-46, -46))
+        write_and_read(OasisTools.write_g_delta, OasisTools.read_g_delta, Point{2, Int64}(-46, -987))
+    end
+    @testset "Write repetitions" begin
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, Point{2, Int64}[]; reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, PointGridRange((0, 0), 130, 129, (1, 0), (0, 1)); reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, PointGridRange((0, 0), 130, 1, (127, 0), (1, 1)); reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, Point{2, Int64}[(0, 0), (127, 0), (128, 0), (255, 0)]; reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, Point{2, Int64}[(0, 0), (254, 0), (256, 0), (510, 0)]; reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, Point{2, Int64}[(0, 0), (0, 127), (0, 128), (0, 255)]; reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, Point{2, Int64}[(0, 0), (0, 254), (0, 256), (0, 510)]; reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, PointGridRange((0, 0), 130, 129, (122, 61), (10, 0)); reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, PointGridRange((0, 0), 3, 1, (122, 61), (1, 1)); reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, Point{2, Int64}[(0, 0), (122, 61), (244, 122)]; reader_type = CellParserState)
+        write_and_read(OasisTools.write_repetition, OasisTools.read_repetition, Point{2, Int64}[(0, 0), (244, 122), (488, 244)]; reader_type = CellParserState)
     end
     @testset "Write intervals" begin
-        state = OasisTools.WriterState("temp", 1024 * 1024)
-        OasisTools.write_interval(state, OasisTools.Interval(128, 128))
-        @test read_and_reset(state, 3) == [0x03, 0x80, 0x01]
-        OasisTools.write_interval(state, OasisTools.Interval(128, typemax(UInt64)))
-        @test read_and_reset(state, 3) == [0x02, 0x80, 0x01]
-        OasisTools.write_interval(state, OasisTools.Interval(128, 256))
-        @test read_and_reset(state, 5) == [0x04, 0x80, 0x01, 0x80, 0x02]
+        write_and_read(OasisTools.write_interval, OasisTools.read_interval, OasisTools.Interval(128, 128))
+        write_and_read(OasisTools.write_interval, OasisTools.read_interval, OasisTools.Interval(128, typemax(UInt64)))
+        write_and_read(OasisTools.write_interval, OasisTools.read_interval, OasisTools.Interval(128, 256))
     end
 end

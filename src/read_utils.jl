@@ -74,22 +74,6 @@ function bit_is_one(byte::UInt8, position::Integer)
     return isone(byte >> (8 - position) & 0x01)
 end
 
-# PLACEMENT records can either use CELLNAME references or strings to refer to what cell is being
-# placed. For consistency, we wish to always log a reference number. However, there is no
-# guarantee that such reference exists, so we'll have to manually create it.
-function _get_or_make_reference(
-    source::Symbol,
-    references::AbstractVector{NumericReference},
-    name::String
-)
-    number = get_reference(source, name, references)
-    if isnothing(number)
-        number = rand(UInt64)
-        push!(references, NumericReference(source, name, number))
-    end
-    return number
-end
-
 function is_end_of_cell(state, next_record::UInt8)
     # The end of a cell is implied when the upcoming record is any of the following:
     # END, CELLNAME, TEXTSTRING, PROPNAME, PROPSTRING, LAYERNAME, CELL, XNAME
@@ -111,7 +95,7 @@ function is_end_of_cell(state, next_record::UInt8)
     end
 end
 
-function find_root_cell(state::ParserState)
+function find_root_cell(state::FileParserState)
     if state.lazy
         # If a lazy loader was used, we cannot infer the cell hierarchy, and instead fall back
         # to finding the optional S_TOP_CELL property record which, if it exists, must be

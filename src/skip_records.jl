@@ -1,6 +1,6 @@
 skip_record(state::AbstractParserState) = return
 
-function skip_start(state::ParserState)
+function skip_start(state::FileParserState)
     skip_string(state)
     skip_real(state)
     offset_flag = rui(state)
@@ -12,20 +12,20 @@ function skip_start(state::ParserState)
     end
 end
 
-function skip_propname_impl(state::ParserState)
+function skip_propname_impl(state::FileParserState)
     skip_string(state)
 end
 
-function skip_propname_ref(state::ParserState)
+function skip_propname_ref(state::FileParserState)
     skip_string(state)
     skip_integer(state)
 end
 
-function skip_propstring_impl(state::ParserState)
+function skip_propstring_impl(state::FileParserState)
     skip_string(state)
 end
 
-function skip_propstring_ref(state::ParserState)
+function skip_propstring_ref(state::FileParserState)
     skip_string(state)
     skip_integer(state)
 end

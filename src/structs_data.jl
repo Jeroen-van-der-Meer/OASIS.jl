@@ -54,6 +54,8 @@ function Base.iterate(r::PointGridRange, i::Integer = zero(length(r)))
     length(r) < i && return nothing
     r[i], i
 end
+Base.convert(::Type{Interval}, x::Integer) = Interval(x, x)
+Base.isdisjoint(i::Interval, j::Interval) = (i.high < j.low) || (j.high < i.low)
 
 nrep(::Nothing) = 1
 nrep(rep::Vector{Point{2, Int64}}) = length(rep)

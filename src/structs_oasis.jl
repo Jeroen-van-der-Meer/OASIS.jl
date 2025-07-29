@@ -22,92 +22,52 @@ struct Shape{T}
     repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
 
-abstract type AbstractReference end
-
-struct NumericReference <: AbstractReference
-    source::Symbol
-    name::String
-    number::UInt64
+struct Layer
+    name::Symbol
+    layerNumber::Interval
+    datatypeNumber::Interval
 end
 
-function get_reference(
-    source::Symbol,
-    number::Integer,
-    references::AbstractVector{NumericReference}
-)
-    index = find_reference(source, number, references)
+Layer(name::AbstractString, args...) = Layer(Symbol(name), args...)
+
+"""
+    name(layer)
+
+Name of a layer.
+"""
+name(layer::Layer) = layer.name
+
+function layer(layers::AbstractVector{Layer}, l::Integer, d::Integer)
+    index = find_layer(layers, l, d)
     isnothing(index) && return
-    return references[index].name
+    return layers[index]
 end
 
-function find_reference(
-    source::Symbol,
-    number::Integer,
-    references::AbstractVector{NumericReference}
-)
-    return findfirst(r -> (r.source == source && r.number == number), references)
+function find_layer(layers::AbstractVector{Layer}, l::Integer, d::Integer)
+    return findfirst(r -> (l in r.layerNumber && d in r.datatypeNumber), layers)
 end
 
-function get_reference(
-    source::Symbol,
-    name::AbstractString,
-    references::AbstractVector{NumericReference}
-)
-    index = find_reference(source, name, references)
-    isnothing(index) && return
-    return references[index].number
+function find_layer(layers::AbstractVector{Layer}, name::Symbol)
+    return findfirst(r -> r.name == name, layers)
 end
 
-function find_reference(
-    source::Symbol,
-    name::AbstractString,
-    references::AbstractVector{NumericReference}
-)
-    return findfirst(r -> (r.source == source && r.name == name), references)
-end
+Base.isdisjoint(l1::Layer, l2::Layer) =
+    isdisjoint(l1.layerNumber, l2.layerNumber) ||
+    isdisjoint(l1.datatypeNumber, l2.datatypeNumber)
 
-function get_reference(
-    name::AbstractString,
-    references::AbstractVector{NumericReference}
-)
-    index = find_reference(name, references)
-    isnothing(index) && return
-    return references[index].number
-end
-
-function find_reference(
-    name::AbstractString,
-    references::AbstractVector{NumericReference}
-)
-    return findfirst(r -> r.name == name, references)
-end
-
-struct LayerReference <: AbstractReference
-    name::String
-    layerInterval::Interval
-    datatypeInterval::Interval
-end
-
-function get_reference(l::UInt64, d::UInt64, refs::AbstractVector{LayerReference})
-    index = findfirst(r -> (l in r.layerInterval && d in r.datatypeInterval), refs)
-    return refs[index].name
-end
-
-Base.@kwdef struct References
-    cellNames::Vector{NumericReference} = []
-    textStrings::Vector{NumericReference} = []
-    layerNames::Vector{LayerReference} = []
-    textLayerNames::Vector{LayerReference} = []
+struct FileProperty
+    nameOrNumber::Union{UInt64, Symbol}
+    valueList::Vector{Any}
 end
 
 Base.@kwdef mutable struct Metadata
-    source::Symbol = Symbol()
-    version::VersionNumber = v"1.0"
     unit::Float64 = 1.0
+    const fileProperties::Vector{FileProperty} = []
+    const roots::Vector{Symbol} = []
 end
 
 struct Text # Might want to think of a better name for this struct, since Text is used by Docs.
-    textNumber::UInt64
+    text::Symbol
     location::Point{2, Int64}
     repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
@@ -130,7 +90,7 @@ Object encoding the placement of a cell in another cell.
 
 # Properties
 
-- `nameNumber::UInt64`: The cell name number for the cell that is being placed.
+- `cellName::Symbol`: Name of cell that's being placed.
 - `location::Point{2, Int64}`: Where the cell will be placed.
 - `rotation::Float64`: Counterclockwise rotation (in degrees) of the cell.
 - `magnification::Float64`: Magnification of the cell.
@@ -140,7 +100,7 @@ Object encoding the placement of a cell in another cell.
 - `repetition`: Specifies whether the shape is repeated. If not, `repetition = nothing`.
 """
 struct CellPlacement
-    nameNumber::UInt64
+    cellName::Symbol
     location::Point{2, Int64}
     rotation::Float64
     magnification::Float64
@@ -148,22 +108,32 @@ struct CellPlacement
     repetition::Union{Nothing, Vector{Point{2, Int64}}, PointGridRange}
 end
 
+abstract type AbstractCell end
+
 """
-    struct Cell(shapes, placements, nameNumber)
+    struct Cell
 
 # Properties
 
+- `name::Symbol`: Name of the cell.
 - `shapes::Vector{Shape}`: Lists the shapes, such as polygons and lines, that are contained in
   the cell.
 - `placements::Vector{CellPlacement}`: Lists all other cells that are placed in this cell.
+- `unit::Float64`: Unit length.
+- `_root::Bool`: Indicates whether the cell is a root cell (i.e., isn't contained in any other
+  cell).
 
 See also [`LazyCell`](@ref).
 """
-struct Cell
-    source::Symbol
-    shapes::Vector{Shape} # Might have references to other cells within them?
-    placements::Vector{CellPlacement} # Other cells
+mutable struct Cell <: AbstractCell
+    const name::Symbol
+    const shapes::Vector{Shape}
+    const placements::Vector{CellPlacement}
+    const unit::Float64
+    _root::Bool
 end
+
+Cell(name::AbstractString, args...) = Cell(Symbol(name), args...)
 
 """
     shapes(cell)
@@ -180,52 +150,78 @@ List the placements contained in `cell`. Not yet supported for `LazyCell`s.
 placements(cell::Cell) = cell.placements
 
 """
-    struct LazyCell(byte, placements)
+    name(cell)
+
+Name of a cell.
+"""
+name(cell::Cell) = cell.name
+
+"""
+    struct LazyCell
 
 Lazy-loaded version of a `Cell`.
 
 # Properties
 
-- `source::Symbol`: Name of the file the cell came from.
+- `name::Symbol`: Name of the cell.
 - `bytes::Vector{UInt8}`: Bytes of the corresponding CELL record.
+- `cellnameReferences::Dict{UInt64, Symbol}`: To ensure all bytes of the corresponding CELL
+  record are interpretable, a `LazyCell` stores a list of internal cell name references.
+- `textstringReferences::Dict{UInt64, Symbol}`: Internal text string references, stored for the
+  same reason as `cellnameReferences`.
+- `unit::Float64`: Unit length.
+- `_root::Bool`: Indicates whether the cell is a root cell (i.e., isn't contained in any other
+  cell).
 
 See also [`Cell`](@ref), [`load_cell!`](@ref).
 """
-struct LazyCell
-    source::Symbol
+mutable struct LazyCell <: AbstractCell
+    const name::Symbol
+    const bytes::SubArray{UInt8, 1, Vector{UInt8}, Tuple{UnitRange{Int64}}, true}
+    const cellnameReferences::Dict{UInt64, Symbol}
+    const textstringReferences::Dict{UInt64, Symbol}
+    const unit::Float64
+    _root::Bool
+end
+
+name(cell::LazyCell) = cell.name
+
+struct PreprocessedCell <: AbstractCell
+    nameOrNumber::Union{Symbol, UInt64}
     bytes::SubArray{UInt8, 1, Vector{UInt8}, Tuple{UnitRange{Int64}}, true}
 end
 
-Base.@kwdef struct CellHierarchy
-    hierarchy::Dict{UInt64, Vector{UInt64}} = Dict()
-    roots::Vector{UInt64} = []
-end
-
 """
-    struct Oasis(cells, metadata, references)
+    struct Oasis
 
 Object containing all the data of your OASIS file.
 
 # Properties
 
-- `cells::Dict{UInt64, Union{Cell, LazyCell}}`: The actual contents. All cells, indexed by
-  their name number. The cells can either be `Cell` objects or lazy-loaded `LazyCell` objects.
-- `hierarchy::CellHierarchy`: Overview of hierarchy of cells and their placements. Not guaranteed
-  to be available if the OASIS file was lazy-loaded.
-- `metadata::Metadata`: File version and length unit.
-- `references::References`: To save on storage space, in an OASIS file, names of cells, layers,
-  etc. are stored only once and are then referenced with a number. We mirror this behaviour in
-  `OasisTools.jl`.
+- `cells::Vector{Union{Cell, LazyCell}}`: Cells in your OASIS file. The cells can either be
+  `Cell` objects or lazy-loaded `LazyCell` objects.
+- `layers::Vector{Layer}`: Lists all named layers in your OASIS file.
 """
 Base.@kwdef struct Oasis
-    cells::Dict{UInt64, Union{Cell, LazyCell}} = Dict()
-    hierarchy::CellHierarchy = CellHierarchy()
-    metadata::Metadata = Metadata()
-    references::References = References()
+    cells::Vector{Union{Cell, LazyCell}} = []
+    layers::Vector{Layer} = [] # FIXME: Unnamed layers aren't added right now.
 end
 
-function Base.getindex(oas::Oasis, cell_name::String)
-    return getindex(cells(oas), cell_number(oas, cell_name))
+Base.getindex(oas::Oasis, name::AbstractString) = getindex(oas, Symbol(name))
+function Base.getindex(oas::Oasis, name::Symbol)
+    return get_cell(oas, name)
+end
+
+get_cell(oas::Oasis, name::AbstractString) = get_cell(oas, Symbol(name))
+function get_cell(oas::Oasis, name::Symbol)
+    index = find_cell(oas, name)
+    isnothing(index) && return nothing
+    return oas.cells[index]
+end
+
+find_cell(oas::Oasis, name::AbstractString) = find_cell(oas, Symbol(name))
+function find_cell(oas::Oasis, name::Symbol)
+    return findfirst(cell -> cell.name == name, oas.cells)
 end
 
 """
@@ -243,17 +239,19 @@ julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
 
 julia> oas = oasisread(filename);
 
-julia> cls = cells(oas);
-
-julia> keys(cls)
-KeySet for a Dict{UInt64, Union{Cell, LazyCell}} with 1 entry. Keys:
-  0x0000000000000000
-
-julia> cell_name(oas, 0x00)
-"TOP"
+julia> cells(oas)
+1-element Vector{Union{Cell, LazyCell}}:
+ Cell TOP with 0 placements and 1 shape
 ```
 """
 cells(oas::Oasis) = oas.cells
+
+"""
+    layers(oas)
+
+List all (explicitly named) layers in your OASIS object.
+"""
+layers(oas::Oasis) = oas.layers
 
 """
     cell_names(oas)
@@ -270,67 +268,28 @@ julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "boxes.oas");
 julia> oas = oasisread(filename);
 
 julia> cell_names(oas)
-2-element Vector{String}:
- "TOP"
- "BOTTOM"
-```
-"""
-cell_names(oas::Oasis) = [c.name for c in oas.references.cellNames]
-
-"""
-    cell_name(oas, cell_number)
-
-Look up the cell name corresponding to a cell name number.
-
-# Example
-
-```jldoctest
-julia> using OasisTools;
-
-julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
-
-julia> oas = oasisread(filename);
-
-julia> cell_name(oas, 0x00) # `cell_name(oas, 0)` also works
-"TOP"
-
-julia> isnothing(cell_name(oas, 0x01)) # Non-existent cell name number; returns nothing
-true
+2-element Vector{Symbol}:
+ :BOTTOM
+ :TOP
 ```
 
-See also [`cell_number`](@ref).
+See also [`cells`](@ref), [`name`](@ref).
 """
-cell_name(oas::Oasis, cell_number::Integer) = get_reference(oas.metadata.source, cell_number, oas.references.cellNames)
+cell_names(oas::Oasis) = [c.name for c in oas.cells]
 
-"""
-    cell_number(oas, cell_name)
+function load_all_cells!(oas::Oasis)
+    for (i, cell) in enumerate(cells(oas))
+        load_cell!(oas, cell, i)
+    end
+end
 
-Look up the cell name number corresponding to a cell name.
-
-# Example
-
-```jldoctest
-julia> using OasisTools;
-
-julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
-
-julia> oas = oasisread(filename);
-
-julia> cell_number(oas, "TOP")
-0x0000000000000000
-
-julia> isnothing(cell_number(oas, "asdf")) # Non-existent cell name; returns nothing
-true
-```
-
-See also [`cell_name`](@ref).
-"""
-cell_number(oas::Oasis, cell_name::AbstractString) = get_reference(cell_name, oas.references.cellNames)
+load_cell!(oas, cell_name::AbstractString) = load_cell!(oas, Symbol(cell_name))
 
 """
     load_cell!(oas, cell_name)
 
-Load a cell into memory. Use this function to convert individual `LazyCell`s into `Cell`s.
+Load a `LazyCell` into memory and replace the `LazyCell` with a corresponding `Cell` in the
+input OASIS file.
 
 # Example
 
@@ -341,31 +300,188 @@ julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "nested.oas");
 
 julia> oas = oasisread(filename; lazy = true);
 
-julia> typeof(oas["BOTTOM"])
-LazyCell
+julia> oas[:TOP]
+Lazy cell TOP
 
-julia> load_cell!(oas, "BOTTOM");
+julia> load_cell!(oas, :TOP);
 
-julia> typeof(oas["BOTTOM"])
-Cell
+julia> oas[:TOP]
+Cell TOP with 5 placements and 0 shapes
 ```
+
+See also [`load_cell`](@ref).
 """
-function load_cell!(oas::Oasis, cell_name::AbstractString)
-    name_number = cell_number(oas, cell_name)
-    lazy_cell = oas.cells[name_number]
-    load_cell!(oas, name_number, lazy_cell)
+function load_cell!(oas::Oasis, cell_name::Symbol)
+    cell = get_cell(oas, cell_name)
+    cell_index = find_cell(oas, cell_name)
+    isnothing(cell_index) && error("Could not find cell with name $cell_name")
+    cell = oas.cells[cell_index]
+    load_cell!(oas, cell, cell_index)
 end
 
-load_cell!(::Oasis, ::UInt64, ::Cell) = return
+load_cell!(::Oasis, ::Cell, ::Int64) = return
 
-function load_cell!(oas::Oasis, cell_number::UInt64, lazy_cell::LazyCell)
-    state = CellParserState(oas, lazy_cell.bytes)
-    while state.pos < length(lazy_cell.bytes)
+function load_cell!(oas::Oasis, lazy_cell::LazyCell, cell_index::Int64)
+    cell = load_cell(lazy_cell)
+    oas.cells[cell_index] = cell
+    return oas
+end
+
+load_cell(cell::Cell) = cell
+
+"""
+    load_cell(lazy_cell)
+
+Load a `LazyCell` into memory.
+
+```jldoctest
+julia> using OasisTools;
+
+julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "polygon.oas");
+
+julia> oas = oasisread(filename; lazy = true);
+
+julia> lazy_cell = oas[:TOP]
+Lazy cell TOP
+
+julia> loaded_cell = load_cell(lazy_cell)
+Cell TOP with 0 placements and 1 shape
+```
+
+See also [`load_cell`](@ref).
+"""
+function load_cell(lazy_cell::LazyCell)
+    state = CellParserState(lazy_cell)
+    nbytes = length(lazy_cell.bytes)
+    while state.pos < nbytes
         record_type = read_byte(state)
         read_record(record_type, state)
     end
-    cell = Cell(oas.metadata.source, state.shapes, state.placements)
-    oas.cells[cell_number] = cell
-    oas.hierarchy.hierarchy[cell_number] = unique(p.nameNumber for p in cell.placements)
+    cell = Cell(lazy_cell.name, state.shapes, state.placements, lazy_cell.unit, lazy_cell._root)
+    return cell
+end
+
+"""
+    roots(oas)
+
+List cells that are known or presumed to be root cells in the OASIS file.
+"""
+roots(oas::Oasis) = roots(cells(oas))
+
+roots(cells::AbstractVector{Union{Cell, LazyCell}}) = [c.name for c in cells if c._root]
+
+"""
+    layer(oas, shape)
+    layer(oas, layer_number, datatype_number)
+
+Find the layer that a given shape belongs to.
+"""
+layer(oas::Oasis, shape::Shape) = layer(oas.layers, shape.layerNumber, shape.datatypeNumber)
+
+find_layer(oas::Oasis, shape::Shape) = find_layer(oas.layers, shape.layerNumber, shape.datatypeNumber)
+
+layer(oas::Oasis, l::Integer, d::Integer) = layer(oas.layers, l, d)
+
+find_layer(oas::Oasis, l::Integer, d::Integer) = find_layer(oas.layers, l, d)
+
+find_layer(oas::Oasis, name::Symbol) = find_layer(oas.shapes, name)
+
+"""
+    add_layer!(oas, layer)
+
+Add new layer to your OASIS file.
+
+# Arguments
+
+- `oas::Oasis`: Your OASIS file.
+- `layer::Layer`: The layer you want to add.
+
+# Example
+
+```jldoctest
+julia> using OasisTools;
+
+julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "nested.oas");
+
+julia> oas = oasisread(filename; lazy = true);
+
+julia> layers(oas)
+1-element Vector{Layer}:
+ M0 (1/0)
+
+julia> add_layer!(oas, Layer(:V0, 2, 0));
+
+julia> layers(oas)
+2-element Vector{Layer}:
+ M0 (1/0)
+ V0 (2/0)
+```
+"""
+add_layer!(oas::Oasis, args...) = add_layer!(layers(oas), args...)
+
+add_layer!(layers::Vector{Layer}, layername, l, d) =
+    add_layer!(layers::Vector{Layer}, Layer(layername, l, d))
+
+function add_layer!(layers::Vector{Layer}, new_layer::Layer)
+    for layer in layers
+        if !isdisjoint(layer, new_layer)
+            error("A layer with this signature already exists: ", layer)
+        end
+    end
+    push!(layers, new_layer)
+end
+
+"""
+    struct CellHierarchy
+
+Encodes the cell hierarchy of an OASIS file.
+
+# Properties
+
+- `hierarchy::Dict{Symbol, Vector{Symbol}}`. The keys are the cell names, and their values are
+  the (unique) names of the cells that have been placed within them.
+"""
+struct CellHierarchy
+    hierarchy::Dict{Symbol, Vector{Symbol}}
+end
+
+function roots(ch::CellHierarchy)
+    all_nodes = keys(ch.hierarchy)
+    child_nodes = unique(k for children in values(ch.hierarchy) for k in children)
+    return setdiff(all_nodes, child_nodes)
+end
+
+# FIXME: Eventually I want CellHierarchy to properly deal with lazy-loaded objects.
+"""
+    cell_hierarchy(oas)
+
+Find the cell hierarchy of your OASIS object. Note that lazy-loaded cells will be listed as
+having no cell placements.
+"""
+function cell_hierarchy(oas::Oasis)
+    ch = CellHierarchy(Dict())
+    for cell in cells(oas)
+        update_cell_hierarchy!(ch, cell)
+    end
+    return ch
+end
+
+function update_cell_hierarchy!(ch::CellHierarchy, cell::Cell)
+    ch.hierarchy[cell.name] = unique(p.cellName for p in placements(cell))
+end
+
+function update_cell_hierarchy!(ch::CellHierarchy, cell::LazyCell)
+    ch.hierarchy[cell.name] = Symbol[]
+end
+
+"""
+
+"""
+function update_roots!(oas::Oasis)
+    rts = roots(cell_hierarchy(oas))
+    for cell in cells(oas)
+        should_be_root = cell.name in rts
+        cell._root = should_be_root
+    end
     return oas
 end

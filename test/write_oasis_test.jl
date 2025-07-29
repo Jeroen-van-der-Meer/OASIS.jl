@@ -5,13 +5,13 @@
         oas = oasisread(filepath; lazy = true)
         
         state = OasisTools.WriterState(oas, "temp", 1024 * 1024)
+        state.cellnameReferences[:TOP] = 123
         cell = oas["TOP"]
-        cell_num = cell_number(oas, "TOP")
-        OasisTools.write_cell(state, cell_num, cell)
+        OasisTools.write_cell(state, cell)
 
         @test read_and_reset(state, state.pos - 1) == [
             0x0d, # CELL record
-            0x00, # New reference
+            0x7b, # 123; the reference we set
             0x15, # POLYGON record
             0x3b, 0x01, 0x00, 0x04, 0x03, # General polygon stuff
             0x82, 0x7d, 0x88, 0x7d, 0x86,
@@ -24,15 +24,16 @@
         oas = oasisread(filepath; lazy = true)
         
         state = OasisTools.WriterState(oas, "temp", 1024 * 1024)
+        state.cellnameReferences[:TOP] = 123
+        state.cellnameReferences[:BOTTOM] = 124
         cell = oas["TOP"]
-        cell_num = cell_number(oas, "TOP")
-        OasisTools.write_cell(state, cell_num, cell)
+        OasisTools.write_cell(state, cell)
 
         @test read_and_reset(state, state.pos - 1) == [
             0x0d, # CELL record
-            0x00, # New reference
+            0x7b, # 123; reference to TOP
             0x11, # PLACEMENT record
-            0xfc, 0x01, 0x91, 0x08, 0xb0, # General placement stuff
+            0xfc, 0x7c, 0x91, 0x08, 0xb0, # General placement stuff, the 0x7c being 124 (BOTTOM)
             0x22, 0x08, 0x04, 0x03, 0xe2,
             0x03, 0xc9, 0x01, 0x3d,
             0x11, # Another PLACEMENT record
@@ -45,13 +46,13 @@
         ]
         
         state = OasisTools.WriterState(oas, "temp", 1024 * 1024)
+        state.cellnameReferences[:BOTTOM] = 124
         cell = oas["BOTTOM"]
-        cell_num = cell_number(oas, "BOTTOM")
-        OasisTools.write_cell(state, cell_num, cell)
+        OasisTools.write_cell(state, cell)
 
         @test read_and_reset(state, state.pos - 1) == [
             0x0d, # CELL record
-            0x01, # New reference
+            0x7c, # 124; reference to BOTTOM
             0x14, # RECTANGLE record
             0xdb, 0x01, 0x00, 0x0a, 0xfd, # General rectangle stuff
             0x02, 0xec, 0x2c
@@ -98,16 +99,14 @@ end
         @test oas isa Oasis
         ncell = length(oas.cells)
         @test ncell == 2
-        bottom_cell_number = cell_number(oas, "BOTTOM")
-        bottom_cell = oas.cells[bottom_cell_number]
-        cellname = OasisTools.get_reference(oas.metadata.source, bottom_cell_number, oas.references.cellNames)
-        @test cellname == "BOTTOM"
+        bottom_cell = oas["BOTTOM"]
+        @test bottom_cell.name == :BOTTOM
         @test length(bottom_cell.shapes) == 1
         rectangle = bottom_cell.shapes[1]
         layer_number = rectangle.layerNumber
         datatype_number = rectangle.datatypeNumber
-        layername = OasisTools.get_reference(layer_number, datatype_number, oas.references.layerNames)
-        @test layername == "TOP"
+        layername = name(layer(oas, layer_number, datatype_number))
+        @test layername == :TOP
         rectangle_shape = rectangle.shape
         @test rectangle_shape isa Rect{2, Int64}
         @test rectangle_shape == Rect{2, Int64}(
@@ -132,8 +131,7 @@ end
         @test circle isa Shape{Polygon{2, Int64}}
         text_cell = oas["TOP"]
         text = text_cell.shapes[1]
-        text_string = OasisTools.get_reference(oas.metadata.source, text.shape.textNumber, oas.references.textStrings)
-        @test text_string == "This is not a circle"
+        @test String(text.shape.text) == "This is not a circle"
     end
     GC.gc()
     @testset "Paths" begin
@@ -179,12 +177,9 @@ end
         s = Suppressor.@capture_out Base.show(oas["ROCKBOTTOM"].shapes[1])
         @test s == "Polygon in layer (1/0) at (1, 0)"
         s = Suppressor.@capture_out Base.show(oas["BOTTOM2"].placements[1])
-        # Interestingly, in the original file, this placement prints as "Placement of cell 6 at
-        # (1, 0)". This indicates that the ordering of the cells in the file was not preserved
-        # when saving. This is not an issue.
-        @test s == "Placement of cell 5 at (1, 0)"
+        @test s == "Placement of cell ROCKBOTTOM at (1, 0)"
         s = Suppressor.@capture_out Base.show(oas["MIDDLE2"].placements[1])
-        @test s == "Placement of cell 3 at (-5, -3) (2×)"
+        @test s == "Placement of cell BOTTOM at (-5, -3) (2×)"
         bottom = oas["BOTTOM"]
         @test length(bottom.shapes) == 1
         bottom2 = oas["BOTTOM2"]
@@ -260,11 +255,11 @@ end
         @test oas isa Oasis
         s = Suppressor.@capture_out Base.show(oas)
         @test s == """
-OASIS file v1.0 with the following cell hierarchy:
-TOP
-OTHERTOP"""
-        s = Suppressor.@capture_out show_cells(oas, "TOP")
-        @test s == "TOP"
+OASIS file with the following cell hierarchy:
+OTHERTOP
+TOP"""
+        s = Suppressor.@capture_out Base.show(oas["TOP"])
+        @test s == "Cell TOP with 0 placements and 1 shape"
     end
     GC.gc()
     @testset "Flipped" begin
