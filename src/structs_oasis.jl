@@ -61,7 +61,7 @@ struct FileProperty
 end
 
 Base.@kwdef mutable struct Metadata
-    unit::Float64 = 1.0
+    unit::Float64 = DEFAULT_UNIT
     const fileProperties::Vector{FileProperty} = []
     const roots::Vector{Symbol} = []
 end
@@ -156,6 +156,8 @@ Name of a cell.
 """
 name(cell::Cell) = cell.name
 
+unit(cell::Cell) = cell.unit
+
 """
     struct LazyCell
 
@@ -185,6 +187,7 @@ mutable struct LazyCell <: AbstractCell
 end
 
 name(cell::LazyCell) = cell.name
+unit(cell::LazyCell) = cell.unit
 
 struct PreprocessedCell <: AbstractCell
     nameOrNumber::Union{Symbol, UInt64}
@@ -198,12 +201,12 @@ Object containing all the data of your OASIS file.
 
 # Properties
 
-- `cells::Vector{Union{Cell, LazyCell}}`: Cells in your OASIS file. The cells can either be
+- `cells::Vector{Union{LazyCell, Cell}}`: Cells in your OASIS file. The cells can either be
   `Cell` objects or lazy-loaded `LazyCell` objects.
 - `layers::Vector{Layer}`: Lists all named layers in your OASIS file.
 """
 Base.@kwdef struct Oasis
-    cells::Vector{Union{Cell, LazyCell}} = []
+    cells::Vector{Union{LazyCell, Cell}} = []
     layers::Vector{Layer} = [] # FIXME: Unnamed layers aren't added right now.
 end
 
@@ -212,16 +215,35 @@ function Base.getindex(oas::Oasis, name::Symbol)
     return get_cell(oas, name)
 end
 
-get_cell(oas::Oasis, name::AbstractString) = get_cell(oas, Symbol(name))
-function get_cell(oas::Oasis, name::Symbol)
-    index = find_cell(oas, name)
+get_cell(oas::Oasis, name) = get_cell(cells(oas), name)
+get_cell(cells::AbstractVector{Union{LazyCell, Cell}}, name::AbstractString) =
+    get_cell(cells, Symbol(name))
+function get_cell(cells::AbstractVector{Union{LazyCell, Cell}}, name::Symbol)
+    index = find_cell(cells, name)
     isnothing(index) && return nothing
-    return oas.cells[index]
+    return cells[index]
 end
 
-find_cell(oas::Oasis, name::AbstractString) = find_cell(oas, Symbol(name))
-function find_cell(oas::Oasis, name::Symbol)
-    return findfirst(cell -> cell.name == name, oas.cells)
+find_cell(oas::Oasis, name) = find_cell(cells(oas), name)
+find_cell(cells::AbstractVector{Union{LazyCell, Cell}}, name::AbstractString) =
+    find_cell(cells, Symbol(name))
+find_cell(cells::AbstractVector{Union{LazyCell, Cell}}, name::Symbol) =
+    findfirst(cell -> cell.name == name, cells)
+
+unit(oas::Oasis) = unit(cells(oas))
+
+function unit(cells::AbstractVector{Union{LazyCell, Cell}})
+    if isempty(cells)
+        @warn "No cells found; taking unit $DEFAULT_UNIT steps per micron"
+        unit = DEFAULT_UNIT
+    else
+        units = unique(cell.unit for cell in cells)
+        unit = first(units)
+        if length(units) > 1
+            @warn "OASIS file has multiple unit lengths"
+        end
+    end
+    return unit
 end
 
 """
@@ -361,6 +383,104 @@ function load_cell(lazy_cell::LazyCell)
     return cell
 end
 
+function add_cell!(oas::Oasis, new_cell; unit::Real = unit(oas))
+    add_cell!(cells(oas), new_cell; unit = unit)
+    return oas
+end
+
+add_cell!(
+    cells::AbstractVector{Union{LazyCell, Cell}},
+    cell_name::AbstractString;
+    unit = unit(cells)
+) = add_cell!(cells, Symbol(cell_name); unit = unit)
+
+function add_cell!(
+    cells::AbstractVector{Union{LazyCell, Cell}},
+    cell_name::Symbol;
+    unit::Real = unit(cells)
+)
+    add_cell!(cells, Cell(cell_name, [], [], unit, true))
+    return cells
+end
+
+"""
+    add_cell!(oas, cell)
+
+Add a cell to an OASIS object.
+
+# Arguments
+
+- `oas::Oasis`: Your input OASIS object.
+- `cell`: Can be a `Cell`, `LazyCell`, or simply the name of the new cell you wish to add.
+
+# Example
+
+```jldoctest
+julia> using OasisTools;
+
+julia> filename = joinpath(OasisTools.TESTDATA_DIRECTORY, "boxes.oas");
+
+julia> oas = oasisread(filename)
+OASIS file with the following cell hierarchy:
+TOP\
+└─ BOTTOM
+
+julia> add_cell!(oas, :NEW)
+OASIS file with the following cell hierarchy:
+TOP\
+└─ BOTTOM\
+NEW
+```
+"""
+function add_cell!(
+    cells::AbstractVector{Union{LazyCell, Cell}},
+    new_cell::Union{LazyCell, Cell}
+)
+    if isnothing(find_cell(cells, new_cell.name))
+        push!(cells, new_cell)
+    else
+        error("Cell with name $(new_cell.name) already exists")
+    end
+    return cells
+end
+
+merge_cells(
+    cells::AbstractVector{Union{LazyCell, Cell}},
+    others::AbstractVector{Union{LazyCell, Cell}}...
+) = merge_cells!(copy(cells), others...)
+
+function merge_cells!(
+    cells::AbstractVector{Union{LazyCell, Cell}},
+    others::AbstractVector{Union{LazyCell, Cell}}...
+)
+    for other in others
+        merge_cells!(cells, other)
+    end
+    return cells
+end
+
+function merge_cells!(
+    cells::AbstractVector{Union{LazyCell, Cell}},
+    other::AbstractVector{Union{LazyCell, Cell}}
+)
+    for new_cell in other
+        merge_cells!(cells, new_cell)
+    end
+    return cells
+end
+
+function merge_cells!(
+    cells::AbstractVector{Union{LazyCell, Cell}},
+    new_cell::Union{LazyCell, Cell}
+)
+    if isnothing(find_cell(cells, new_cell.name))
+        push!(cells, new_cell)
+    else
+        @warn "Duplicate cell name $(new_cell.name) detected"
+    end
+    return cells
+end
+
 """
     roots(oas)
 
@@ -368,7 +488,7 @@ List cells that are known or presumed to be root cells in the OASIS file.
 """
 roots(oas::Oasis) = roots(cells(oas))
 
-roots(cells::AbstractVector{Union{Cell, LazyCell}}) = [c.name for c in cells if c._root]
+roots(cells::AbstractVector{Union{LazyCell, Cell}}) = [c.name for c in cells if c._root]
 
 """
     layer(oas, shape)
@@ -378,7 +498,8 @@ Find the layer that a given shape belongs to.
 """
 layer(oas::Oasis, shape::Shape) = layer(oas.layers, shape.layerNumber, shape.datatypeNumber)
 
-find_layer(oas::Oasis, shape::Shape) = find_layer(oas.layers, shape.layerNumber, shape.datatypeNumber)
+find_layer(oas::Oasis, shape::Shape) =
+    find_layer(oas.layers, shape.layerNumber, shape.datatypeNumber)
 
 layer(oas::Oasis, l::Integer, d::Integer) = layer(oas.layers, l, d)
 
@@ -419,16 +540,114 @@ julia> layers(oas)
 """
 add_layer!(oas::Oasis, args...) = add_layer!(layers(oas), args...)
 
-add_layer!(layers::Vector{Layer}, layername, l, d) =
-    add_layer!(layers::Vector{Layer}, Layer(layername, l, d))
+add_layer!(layers::AbstractVector{Layer}, layername, l, d) =
+    add_layer!(layers::AbstractVector{Layer}, Layer(layername, l, d))
 
-function add_layer!(layers::Vector{Layer}, new_layer::Layer)
+function add_layer!(layers::AbstractVector{Layer}, new_layer::Layer)
     for layer in layers
         if !isdisjoint(layer, new_layer)
             error("A layer with this signature already exists: ", layer)
         end
     end
     push!(layers, new_layer)
+end
+
+merge_layers(layers::AbstractVector{Layer}, others::AbstractVector{Layer}...) =
+    merge_layers!(copy(layers), others...)
+
+function merge_layers!(layers::AbstractVector{Layer}, others::AbstractVector{Layer}...)
+    for other in others
+        merge_layers!(layers, other)
+    end
+    return layers
+end
+
+function merge_layers!(layers::AbstractVector{Layer}, other::AbstractVector{Layer})
+    for new_layer in other
+        merge_layers!(layers, new_layer)
+    end
+    return layers
+end
+
+function merge_layers!(layers::AbstractVector{Layer}, new_layer::Layer)
+    for (i, layer) in enumerate(layers)
+        if !isdisjoint(layer, new_layer)
+            if (layer.layerNumber == new_layer.layerNumber) &&
+                (layer.datatypeNumber == new_layer.datatypeNumber)
+                if layer.name != new_layer.name
+                    layers[i] = Layer(
+                        Symbol(layer.name, :", ", new_layer.name),
+                        layer.layerNumber,
+                        layer.datatypeNumber
+                    )
+                end
+            else
+                if layer.name != new_layer.name
+                    @warn "Ambiguity merging layers $layer and $new_layer -- skipping $new_layer"
+                else
+                    layers[i] = Layer(
+                        layer.name,
+                        union(layer.layerNumber, new_layer.layerNumber),
+                        union(layer.datatypeNumber, new_layer.datatypeNumber)
+                    )
+                end
+            end
+        end
+    end
+    return layers
+end
+
+Base.copy(oas::Oasis) = Oasis(copy(oas.cells), copy(oas.layers))
+
+"""
+    merge_oases(oas...)
+
+Merge one or more OASIS files. Using an opinionated plural for 'OASIS'.
+
+# Example
+
+```jldoctest
+julia> using OasisTools;
+
+julia> filename1 = joinpath(OasisTools.TESTDATA_DIRECTORY, "nested.oas");
+
+julia> filename2 = joinpath(OasisTools.TESTDATA_DIRECTORY, "trapezoids.oas");
+
+julia> oas1 = oasisread(filename1; lazy = true)
+OASIS file with the following cell hierarchy:
+TOP
+└─ ?
+
+julia> oas2 = oasisread(filename2)
+OASIS file with the following cell hierarchy:
+noname
+
+julia> oas = merge_oases(oas1, oas2)
+OASIS file with the following cell hierarchy:
+TOP
+└─ ?\
+noname
+```
+"""
+merge_oases(oasis::Oasis, others::Oasis...) = merge_oases!(copy(oasis), others...)
+
+"""
+    merge!(oas, others...)
+
+Update OASIS file with content from the other OASIS files. Using an opinionated plural for
+'OASIS'.
+"""
+function merge_oases!(oasis::Oasis, others::Oasis...)
+    for other in others
+        merge_oases!(oasis, other)
+    end
+    return oasis
+end
+
+function merge_oases!(oasis::Oasis, other::Oasis)
+    merge_cells!(oasis.cells, other.cells)
+    merge_layers!(oasis.layers, other.layers)
+    return oasis
 end
 
 """
@@ -475,7 +694,11 @@ function update_cell_hierarchy!(ch::CellHierarchy, cell::LazyCell)
 end
 
 """
+    update_roots!(oas)
 
+Go through the cell hierarchy to figure out what cells are likely to be root cells. May be
+inaccurate if your OASIS file contains any `LazyCell` objects, as their placements are
+unknown.
 """
 function update_roots!(oas::Oasis)
     rts = roots(cell_hierarchy(oas))

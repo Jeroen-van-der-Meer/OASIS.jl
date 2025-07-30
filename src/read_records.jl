@@ -3,8 +3,7 @@ function read_start(state::FileParserState)
     if version != v"1.0.0"
         @warn "Unknown file version detected. Attempting to read anyway."
     end
-    unit = read_real(state) # Convention: Grid steps per micron.
-    state.metadata.unit = 1e6 / unit
+    state.metadata.unit = read_real(state) # Convention: Grid steps per micron.
     offset_flag = rui(state)
     if iszero(offset_flag)
         # We ignore the 12 integers corresponding to the table offset structure.

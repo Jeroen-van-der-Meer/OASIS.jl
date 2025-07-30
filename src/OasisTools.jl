@@ -4,6 +4,7 @@ using CodecZlib
 using GeometryBasics
 import Mmap: mmap
 
+export add_cell!
 export add_layer!
 export Cell
 export cell_hierarchy
@@ -20,6 +21,8 @@ export LazyCell
 export load_all_cells!
 export load_cell
 export load_cell!
+export merge_oases
+export merge_oases!
 export name
 export Oasis
 export oasisread
@@ -33,6 +36,7 @@ export Shape
 export shapes
 export show_cells
 export show_shapes
+export unit
 export update_roots!
 
 # Structs
@@ -68,5 +72,6 @@ end
 # Consts
 const MAGIC_BYTES = [0x25, 0x53, 0x45, 0x4d, 0x49, 0x2d, 0x4f, 0x41, 0x53, 0x49, 0x53, 0x0d, 0x0a]
 const TESTDATA_DIRECTORY = joinpath(@__DIR__, "..", "test", "testdata")
+const DEFAULT_UNIT = 1000
 
 end # module OasisTools
